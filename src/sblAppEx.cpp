@@ -67,6 +67,7 @@
 #include <time.h>
 #include <sys/timeb.h>  /* ftime, timeb (for timestamp in millisecond) */
 #include <sys/time.h>   /* gettimeofday, timeval (for timestamp in microsecond) */
+#include "CC2650_fw_update.h"
 
 #ifdef ANDROID
 	#define def_selected_serial_port "/dev/ttymxc2"
@@ -80,17 +81,13 @@
 
 static void open_syslog(void)
 {
-// this goes straight to /var/log/syslog file
-//	Nov  3 12:16:53 localhost ASAC_Zlog[13149]: Log just started
-//	Nov  3 12:16:53 localhost ASAC_Zlog[13149]: The application starts
-
-	openlog("CC2650_fw_updlog", LOG_PID|LOG_CONS, LOG_DAEMON);
+	openlog("CC2650_fw_upd", LOG_PID|LOG_CONS, LOG_DAEMON);
 	syslog(LOG_INFO, "Log just started");
 }
 
 #include <sys/stat.h>
 #include <fcntl.h>
-int is_OK_do_CC2650_reset(unsigned int enable_boot_mode)
+static int is_OK_do_CC2650_reset(unsigned int enable_boot_mode)
 {
 	int is_OK = 1;
 #define gpio_base_path "/sys/class/gpio"
@@ -199,7 +196,8 @@ int is_OK_do_CC2650_reset(unsigned int enable_boot_mode)
 	return	is_OK;
 }
 
-int64_t get_current_epoch_time_ms(void)
+#if 0
+static int64_t get_current_epoch_time_ms(void)
 {
 	struct timeb timer_msec;
 	int64_t timestamp_msec; // timestamp in milliseconds
@@ -213,6 +211,7 @@ int64_t get_current_epoch_time_ms(void)
 	}
 	return timestamp_msec;
 }
+#endif
 
 
 //
@@ -223,7 +222,7 @@ int64_t get_current_epoch_time_ms(void)
 
 
 // Calculate crc32 checksum the way CC2538 and CC2650 does it.
-int calcCrcLikeChip(const unsigned char *pData, unsigned long ulByteCount)
+static int calcCrcLikeChip(const unsigned char *pData, unsigned long ulByteCount)
 {
     unsigned long d, ind;
     unsigned long acc = 0xFFFFFFFF;
@@ -248,7 +247,7 @@ int calcCrcLikeChip(const unsigned char *pData, unsigned long ulByteCount)
 }
 
 /// Application status function (used as SBL status callback)
-void appStatus(char *pcText, bool bError)
+static void appStatus(char *pcText, bool bError)
 {
     if(bError)
     {
@@ -257,7 +256,6 @@ void appStatus(char *pcText, bool bError)
     else
     {
     	syslog(LOG_INFO, "%s", pcText);
-        //cout << pcText;
     }
 }
 
@@ -265,25 +263,7 @@ void appStatus(char *pcText, bool bError)
 /// Application progress function (used as SBL progress callback)
 static void appProgress(uint32_t progress)
 {
-    fprintf(stdout, "\r%d%% ", progress);
-    fflush(stdout);
-}
-
-// Time variables for calculating execution time.
-static int64_t tBefore, tAfter;
-
-extern int64_t get_current_epoch_time_ms(void);
-// Start millisecond timer
-static void getTime(void)
-{
-	tBefore = get_current_epoch_time_ms();
-}
-
-// Print time since getTime()
-static void printTimeDelta(void)
-{
-	tAfter = get_current_epoch_time_ms();
-    //printf("delta: %"PRI64 ms", (tAfter - tBefore));
+	//syslog(LOG_INFO, "\r%d%% ", progress);
 }
 
 // Defines
@@ -296,12 +276,20 @@ static void my_at_exit(void)
 {
 	// remove the reset from the CC2650
 	is_OK_do_CC2650_reset(0);
+	// at exit, close the system log
+	closelog();
 }
 
-// Application main function
-int do_fw_update(void)
+#ifdef __GLIBC__
+extern "C" enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_file)
+#else
+enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_file)
+#endif
 {
+	enum_do_CC2650_fw_update_retcode r = enum_do_CC2650_fw_update_retcode_OK;
+
 	open_syslog();
+	syslog(LOG_INFO, "%s + starts", __func__);
 
 	atexit(my_at_exit);
 
@@ -317,10 +305,6 @@ int do_fw_update(void)
 	//
 
 	SblDevice *pDevice = NULL;		// Pointer to SblDevice object
-	//int32_t devIdx;					//
-    //ComPortElement pElements[10];	// An array for the COM ports that will be found by enumeration.
-    //int32_t nElem = 10;				// Sets the number of COM ports to list by SBL.
-    int32_t devStatus = -1;			// Hold SBL status codes
 	std::string fileName;			// File name to program
 	uint32_t byteCount = 0;			// File size in bytes
     uint32_t fileCrc, devCrc;		// Variables to save CRC checksum
@@ -329,166 +313,220 @@ int do_fw_update(void)
 	static std::ifstream file;		// File stream
 
 
-	if (!is_OK_do_CC2650_reset(1))
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
-        goto error;
+		if (!is_OK_do_CC2650_reset(1))
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_reset_chip;
+	    	syslog(LOG_ERR, "ERR_unable_to_reset_chip");
+		}
 	}
 
-	fileName = "/usr/znp_coordinator_pro_secure_linkkeyjoin_2_6_5.bin";
-	devFlashBase = CC26XX_FLASH_BASE;
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		fileName = path_binary_file;
+		devFlashBase = CC26XX_FLASH_BASE;
 
-    //
-    // Set callback functions
-    //
-    SblDevice::setCallBackStatusFunction(&appStatus);
-    SblDevice::setCallBackProgressFunction(&appProgress);
+		//
+		// Set callback functions
+		//
+		SblDevice::setCallBackStatusFunction(&appStatus);
+		SblDevice::setCallBackProgressFunction(&appProgress);
 
+		//
+		// Create SBL object
+		//
+		pDevice = SblDevice::Create(deviceType);
+		if(pDevice == NULL)
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_create_SBL_object;
+	    	syslog(LOG_ERR, "ERR_unable_to_create_SBL_object");
+		}
+	}
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		//
+		// Connect to device
+		//
+		syslog(LOG_INFO, "Opening the serial port %s", def_selected_serial_port);
+		if(pDevice->connect(def_selected_serial_port, false) != SBL_SUCCESS)
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_connect_with_the_chip;
+			syslog(LOG_INFO, "Opening the serial port %s something went wrong", def_selected_serial_port);
+		}
+	}
 
-    //
-    // Print out header
-    //
-    //cout << "+-------------------------------------------------------------\n";
-    //cout << "| Serial Bootloader Library Example Application for CC" << (deviceType >> 12 & 0xf) << (deviceType >> 8 & 0xf) << (deviceType >> 4 & 0xf) << (deviceType & 0xf) << "\n";
-    //cout << "+-------------------------------------------------------------\n\n";
-    //
-    // Create SBL object
-    //
-    pDevice = SblDevice::Create(deviceType);
-    if(pDevice == NULL) 
-    { 
-        //cout << "No SBL device object.\n";
-        goto error;
-    }
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		//
+		// Read file
+		//
+		syslog(LOG_INFO, "Opening the file %s", fileName.c_str());
+		file.open(fileName.c_str(), std::ios::binary);
+		if( ! file.is_open())
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_open_the_firmware_file;
+			syslog(LOG_ERR, "unable to open the file %s", fileName.c_str());
+		}
+	}
 
-    //
-    // Connect to device
-    //
-	syslog(LOG_INFO, "Opening the serial port %s", def_selected_serial_port);
-	getTime();
-    if(pDevice->connect(def_selected_serial_port, false) != SBL_SUCCESS)
-    { 
-    	syslog(LOG_INFO, "Opening the serial port %s soething went wrong", def_selected_serial_port);
-    	goto error;
-    }
-	printTimeDelta();
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		//
+		// Get file size:
+		//
+		file.seekg(0, std::ios::end);
+		if (file.fail())
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_seek_to_the_file_end;
+			//cout << "Unable to open file " << fileName.c_str();
+			syslog(LOG_ERR, "unable to seek to the very end of the file");
+		}
+	}
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		byteCount = (uint32_t)file.tellg();
+		if (file.fail())
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_get_filesize;
+			syslog(LOG_ERR, "unable to get the file size");
+		}
+		else
+		{
+			syslog(LOG_INFO, "Number of bytes in the file: %u", byteCount);
+		}
+	}
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		file.seekg(0, std::ios::beg);
+		if (file.fail())
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_seek_where_the_file_begins;
+			syslog(LOG_ERR, "unable to seek to the begin of the file");
+		}
+	}
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		//
+		// Read data
+		//
+		try
+		{
+			pvWrite.resize(byteCount);
+		}
+		catch (std::bad_alloc const&)
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_allocate_the_read_buffer;
+			syslog(LOG_ERR, "unable to allocate the read buffer");
+		}
+	}
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		file.read((char*) &pvWrite[0], byteCount);
+		if (file.fail())
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_read_the_whole_file;
+			syslog(LOG_ERR, "unable to read the whole file");
+		}
+	}
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		file.close();
+		if (file.fail())
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_close_the_file;
+			syslog(LOG_ERR, "unable to close the file");
+		}
+	}
+
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		//
+		// Calculate file CRC checksum
+		//
+		fileCrc = calcCrcLikeChip((unsigned char *)&pvWrite[0], byteCount);
+
+		//
+		// Erasing as much flash needed to program firmware.
+		//
+		syslog(LOG_INFO, "erasing the flash...");
+		if(pDevice->eraseFlashRange(devFlashBase, byteCount) != SBL_SUCCESS)
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_erase_the_flash;
+			syslog(LOG_ERR, "erasing the flash something went wrong");
+		}
+	}
+
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		//
+		// Writing file to device flash memory.
+		//
+		syslog(LOG_INFO, "writing the flash...");
+		if(pDevice->writeFlashRange(devFlashBase, byteCount, &pvWrite[0]) != SBL_SUCCESS)
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_writing_flash;
+			syslog(LOG_ERR, "writing the flash something went wrong");
+		}
+	}
+
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		//
+		// Calculate CRC checksum of flashed content.
+		//
+		syslog(LOG_INFO, "Calculating the CRC...");
+		if(pDevice->calculateCrc32(devFlashBase, byteCount, &devCrc) != SBL_SUCCESS)
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_CRC_calculating_gone_bad;
+			syslog(LOG_ERR, "Calculating the CRC something went wrong");
+
+		}
+	}
 	
-    //
-    // Read file
-    //
-	syslog(LOG_INFO, "Opening the file %s", fileName.c_str());
-	file.open(fileName.c_str(), std::ios::binary);
-    if(file.is_open())
-    {
-        //
-        // Get file size:
-        //
-        file.seekg(0, std::ios::end);
-        byteCount = (uint32_t)file.tellg();
-        file.seekg(0, std::ios::beg);
-    	syslog(LOG_INFO, "Number of bytes in the file: %u", byteCount);
-
-        //
-        // Read data
-        //
-        pvWrite.resize(byteCount);
-        file.read((char*) &pvWrite[0], byteCount);
-    }
-    else   
-    {
-		//cout << "Unable to open file " << fileName.c_str();
-    	syslog(LOG_ERR, "unable to open the file %s", fileName.c_str());
-        goto error;
-    }
-
-    //
-    // Calculate file CRC checksum
-    //
-    fileCrc = calcCrcLikeChip((unsigned char *)&pvWrite[0], byteCount);
-
-	//
-	// Erasing as much flash needed to program firmware.
-	//
-    //cout << "Erasing flash ...\n";
-    getTime();
-	syslog(LOG_INFO, "erasing the flash...");
-    if(pDevice->eraseFlashRange(devFlashBase, byteCount) != SBL_SUCCESS)
-    {
-    	syslog(LOG_ERR, "erasing the flash something went wrong");
-        goto error;
-    }
-    printTimeDelta();
-
-	//
-	// Writing file to device flash memory.
-	//
-    //cout << "Writing flash ...\n";
-    getTime();
-	syslog(LOG_INFO, "writing the flash...");
-    if(pDevice->writeFlashRange(devFlashBase, byteCount, &pvWrite[0]) != SBL_SUCCESS)
-    {
-    	syslog(LOG_ERR, "writing the flash something went wrong");
-        goto error;
-    }
-    printTimeDelta();
-
-	//
-	// Calculate CRC checksum of flashed content.
-	//
-    //cout << "Calculating CRC on device ...\n";
-    getTime();
-	syslog(LOG_INFO, "Calculating the CRC...");
-    if(pDevice->calculateCrc32(devFlashBase, byteCount, &devCrc) != SBL_SUCCESS)
-    {
-    	syslog(LOG_ERR, "Calculating the CRC something went wrong");
-        goto error;
-
-    }
-
-    printTimeDelta();
-
-	//
-	// Compare CRC checksums
-	//
-    //cout << "Comparing CRC ...\n";
-    if(fileCrc == devCrc)
-    {
-    	syslog(LOG_INFO, "The CRC compares OK");
-    }
-    else
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
-    	syslog(LOG_ERR, "The CRC are different: file is 0x%X, device gives 0x%X", fileCrc, devCrc);
+		//
+		// Compare CRC checksums
+		//
+		if(fileCrc == devCrc)
+		{
+			syslog(LOG_INFO, "The CRC compares OK");
+		}
+		else
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_CRC_checking_gone_bad;
+			syslog(LOG_ERR, "The CRC are different: file is 0x%X, device gives 0x%X", fileCrc, devCrc);
+		}
+	}
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		if(pDevice->reset() != SBL_SUCCESS)
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_chip_reset_gone_bad;
+			syslog(LOG_ERR, "ERR_chip_reset_gone_bad");
+		}
 	}
 
-    //cout << "Resetting device ...\n";
-    if(pDevice->reset() != SBL_SUCCESS)
-    {
-        goto error;
-    }
-    //cout << "OK\n";
-
-    //
-    // If we got here, all succeeded. Jump to exit.
-    //
-    goto exit;
-
-error:
-    //cout << "\n\nAn error occurred: " << pDevice->getLastStatus();
-exit:
-	devStatus = 0;
-	if(pDevice != NULL) {
-		devStatus = pDevice->getLastStatus();
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		syslog(LOG_INFO, "Procedure ends OK");
 	}
+	else
+	{
+		syslog(LOG_ERR, "Procedure ends with error: %u", (uint32_t)r);
+	}
+	syslog(LOG_INFO, "%s - ends", __func__);
 	
 	syslog(LOG_INFO, "The application closes");
-	// at exit, close system log
-	closelog();
 
-	return devStatus;
+	return r;
 }
 
 
-
+#ifndef __GLIBC__
 int main()
 {
-	 return do_fw_update();
+	 return do_CC2650_fw_update("/usr/znp_coordinator_pro_secure_linkkeyjoin_2_6_5.bin");
 }
+#endif
