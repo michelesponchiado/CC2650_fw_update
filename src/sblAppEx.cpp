@@ -261,12 +261,24 @@ static void appStatus(char *pcText, bool bError)
     }
 }
 
+#ifdef OLINUXINO_LIB
+static uint32_t percentage_progress = 0;
+#endif
 
 /// Application progress function (used as SBL progress callback)
 static void appProgress(uint32_t progress)
 {
-	//syslog(LOG_INFO, "\r%d%% ", progress);
+#ifdef OLINUXINO_LIB
+	percentage_progress = progress;
+#endif
 }
+
+#ifdef OLINUXINO_LIB
+uint32_t get_CC2650_fw_update_progress(void)
+{
+	return percentage_progress;
+}
+#endif
 
 // Defines
 #define DEVICE_CC2538				0x2538
@@ -293,6 +305,10 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_fil
 	atexit(my_at_exit);
 #endif
 	syslog(LOG_INFO, "%s + starts", __func__);
+
+#ifdef OLINUXINO_LIB
+	percentage_progress = 0;
+#endif
 
 
 	//
