@@ -54,6 +54,7 @@ public:
 
     // Static functions
     static SblDevice *Create(uint32_t ui32ChipType);
+    void CloseSerialPort();
     virtual int32_t HasDataSerialPortDataMicroseconds(uint32_t usec);
     virtual uint32_t connect(std::string csPortNum, bool bEnableXosc = false);
     virtual uint32_t ping() = 0;

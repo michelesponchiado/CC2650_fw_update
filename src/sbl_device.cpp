@@ -102,6 +102,16 @@ SblDevice::~SblDevice()
     m_flashSize = -1;
 }
 
+void SblDevice::CloseSerialPort()
+{
+    if(fd >= 0)
+    {
+    	close(fd);
+    }
+	fd = -1;
+}
+
+
 
 //-----------------------------------------------------------------------------
 /** \brief Create Serial Bootloader Device

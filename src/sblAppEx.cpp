@@ -440,19 +440,79 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_fil
 			syslog(LOG_ERR, "unable to close the file");
 		}
 	}
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		if (byteCount <= sizeof(type_ASACZ_CC2650_fw_update_header))
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_filesize_too_small;
+			syslog(LOG_ERR, "the file size is too small to contain both header and body");
+		}
+	}
+
+	type_ASACZ_CC2650_fw_update_header * p_header = (type_ASACZ_CC2650_fw_update_header *)&pvWrite[0];
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		uint32_t calc_crc_header = calcCrcLikeChip((unsigned char *)p_header, sizeof(type_ASACZ_CC2650_fw_update_header) - sizeof(p_header->header_CRC32_CC2650));
+		if (calc_crc_header != p_header->header_CRC32_CC2650)
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_invalid_header_CRC32;
+			syslog(LOG_ERR, "header has invalid header CRC : calculated is 0x%08X, header has 0x%08X", calc_crc_header, p_header->header_CRC32_CC2650);
+		}
+		else
+		{
+			syslog(LOG_INFO, "magic key  %s"	, p_header->magic_name);
+			syslog(LOG_INFO, "ASCII ver. %s"	, p_header->ascii_version_number);
+			syslog(LOG_INFO, "date       %s"	, p_header->date);
+			syslog(LOG_INFO, "fw version %u.%u.%u"	, p_header->fw_version_major, p_header->fw_version_middle, p_header->fw_version_minor);
+			syslog(LOG_INFO, "body size  %u"		, p_header->firmware_body_size);
+			syslog(LOG_INFO, "BODY CRC   0x%08X"	, p_header->firmware_body_CRC32_CC2650);
+			syslog(LOG_INFO, "header CRC 0x%08X"	, p_header->header_CRC32_CC2650);
+		}
+	}
 
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
-		//
-		// Calculate file CRC checksum
-		//
-		fileCrc = calcCrcLikeChip((unsigned char *)&pvWrite[0], byteCount);
+		if (strcmp((const char*)p_header->magic_name, (const char*)def_magic_name_ASACZ_CC2650_fw_update_header))
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_invalid_header_magic_key;
+			syslog(LOG_ERR, "header has invalid magic name %s", (const char*)p_header->magic_name);
+		}
+	}
+
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		if (p_header->firmware_body_size + sizeof(type_ASACZ_CC2650_fw_update_header) != byteCount)
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_invalid_body_size;
+			syslog(LOG_ERR, "header has invalid body size; expected %u, read %u", p_header->firmware_body_size, (unsigned int)(byteCount - sizeof(type_ASACZ_CC2650_fw_update_header)));
+		}
+	}
+
+	unsigned char * p_firmware_body = (unsigned char *)&pvWrite[0] + sizeof(type_ASACZ_CC2650_fw_update_header);
+	uint32_t body_size = p_header->firmware_body_size;
+	//
+	// Calculate file CRC checksum
+	//
+	fileCrc = calcCrcLikeChip(p_firmware_body, body_size);
+
+	// check if valid
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
+		if (fileCrc != p_header->firmware_body_CRC32_CC2650)
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_invalid_body_CRC;
+			syslog(LOG_ERR, "header has invalid body CRC; header has %u, calculated is %u", p_header->firmware_body_CRC32_CC2650, fileCrc);
+		}
+	}
+
+	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	{
 
 		//
 		// Erasing as much flash needed to program firmware.
 		//
 		syslog(LOG_INFO, "erasing the flash...");
-		if(pDevice->eraseFlashRange(devFlashBase, byteCount) != SBL_SUCCESS)
+		if(pDevice->eraseFlashRange(devFlashBase, body_size) != SBL_SUCCESS)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_erase_the_flash;
 			syslog(LOG_ERR, "erasing the flash something went wrong");
@@ -465,7 +525,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_fil
 		// Writing file to device flash memory.
 		//
 		syslog(LOG_INFO, "writing the flash...");
-		if(pDevice->writeFlashRange(devFlashBase, byteCount, &pvWrite[0]) != SBL_SUCCESS)
+		if(pDevice->writeFlashRange(devFlashBase, body_size, (const char *)p_firmware_body) != SBL_SUCCESS)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_writing_flash;
 			syslog(LOG_ERR, "writing the flash something went wrong");
@@ -478,7 +538,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_fil
 		// Calculate CRC checksum of flashed content.
 		//
 		syslog(LOG_INFO, "Calculating the CRC...");
-		if(pDevice->calculateCrc32(devFlashBase, byteCount, &devCrc) != SBL_SUCCESS)
+		if(pDevice->calculateCrc32(devFlashBase, body_size, &devCrc) != SBL_SUCCESS)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_CRC_calculating_gone_bad;
 			syslog(LOG_ERR, "Calculating the CRC something went wrong");
@@ -509,6 +569,9 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_fil
 			syslog(LOG_ERR, "ERR_chip_reset_gone_bad");
 		}
 	}
+
+	pDevice->CloseSerialPort();
+
 	// removes the reset from the CC2650
 	if (!is_OK_do_CC2650_reset(0))
 	{
@@ -544,6 +607,7 @@ typedef enum
 {
 	enum_ASACZ_CC2650fw_retcode_OK = 0,
 	enum_ASACZ_CC2650fw_retcode_ERR_incorrect_number_of_arguments,
+	enum_ASACZ_CC2650fw_retcode_ERR_unknown_fw_type,
 	enum_ASACZ_CC2650fw_retcode_ERR_incorrect_firmware_version_number_major,
 	enum_ASACZ_CC2650fw_retcode_ERR_incorrect_firmware_version_number_middle,
 	enum_ASACZ_CC2650fw_retcode_ERR_incorrect_firmware_version_number_minor,
@@ -556,6 +620,7 @@ typedef enum
 	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_read_input_file_body,
 	enum_ASACZ_CC2650fw_retcode_ERR_close_input_file,
 	enum_ASACZ_CC2650fw_retcode_ERR_magic_name_too_long,
+	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_sprint_ascii_fw_type,
 	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_sprint_ascii_version_number,
 	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_sprint_date,
 	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_sprint_output_filename,
@@ -567,13 +632,21 @@ typedef enum
 	enum_ASACZ_CC2650fw_retcode_numof
 }enum_ASACZ_CC2650fw_retcode;
 
+// recognized firmware types, please put printable plain normal characters here, avoid blanks etc
+const char *fw_types_OK[]=
+{
+	"COORDINATOR","ROUTER","END_DEVICE"
+};
+
 int main(int argc, char *argv[])
 {
 	enum_ASACZ_CC2650fw_retcode r = enum_ASACZ_CC2650fw_retcode_OK;
 	char *filename_in = NULL;
+	char *fw_type_in = NULL;
+	uint32_t fw_type = 0;
 	if (r == enum_ASACZ_CC2650fw_retcode_OK)
 	{
-		if (argc < 5)
+		if (argc < 6)
 		{
 			r = enum_ASACZ_CC2650fw_retcode_ERR_incorrect_number_of_arguments;
 		}
@@ -583,11 +656,31 @@ int main(int argc, char *argv[])
 	if (r == enum_ASACZ_CC2650fw_retcode_OK)
 	{
 		filename_in = argv[1];
+		fw_type_in = argv[2];
+		unsigned int i;
+		unsigned int found_OK = 0;
+		for (i = 0; !found_OK && i < sizeof(fw_types_OK)/sizeof(fw_types_OK[0]); i++)
+		{
+			if (strcmp(fw_types_OK[i], fw_type_in) == 0)
+			{
+				fw_type = i;
+				found_OK = 1;
+				break;
+			}
+		}
+		if (!found_OK)
+		{
+			r = enum_ASACZ_CC2650fw_retcode_ERR_unknown_fw_type;
+		}
+	}
+
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
 		unsigned int i;
 		for (i = 0; i < 3; i++)
 		{
 			char * endptr;
-			long int n = strtol(argv[2 + i], &endptr, 0);
+			long int n = strtol(argv[3 + i], &endptr, 0);
 			if ((*endptr != 0) || (n < 0) || (n > 255))
 			{
 				r = (enum_ASACZ_CC2650fw_retcode)(enum_ASACZ_CC2650fw_retcode_ERR_incorrect_firmware_version_number_major + i);
@@ -677,13 +770,22 @@ int main(int argc, char *argv[])
 	}
 	if (r == enum_ASACZ_CC2650fw_retcode_OK)
 	{
+		ASACZ_CC2650_fw_update_header.fw_type = fw_type;
+		int n = snprintf((char *)ASACZ_CC2650_fw_update_header.ascii_fw_type, sizeof(ASACZ_CC2650_fw_update_header.ascii_fw_type), "%s",
+				fw_types_OK[ASACZ_CC2650_fw_update_header.fw_type]
+				);
+		if (n >= (int)sizeof(ASACZ_CC2650_fw_update_header.ascii_fw_type))
+		{
+			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_sprint_ascii_fw_type;
+		}
+	}
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
 		ASACZ_CC2650_fw_update_header.firmware_body_size = l_filesize;
 		ASACZ_CC2650_fw_update_header.fw_version_major = fw_numbers[0];
 		ASACZ_CC2650_fw_update_header.fw_version_middle = fw_numbers[1];
 		ASACZ_CC2650_fw_update_header.fw_version_minor = fw_numbers[2];
 		ASACZ_CC2650_fw_update_header.firmware_body_CRC32_CC2650 = calcCrcLikeChip((const unsigned char *)p_bin_file_body, ASACZ_CC2650_fw_update_header.firmware_body_size);
-		int header_CRC_size = sizeof(ASACZ_CC2650_fw_update_header) - sizeof(ASACZ_CC2650_fw_update_header.header_CRC32_CC2650);
-		ASACZ_CC2650_fw_update_header.header_CRC32_CC2650 = calcCrcLikeChip((const unsigned char *)&ASACZ_CC2650_fw_update_header, header_CRC_size);
 
 		time_t rawtime;
 		struct tm * timeinfo;
@@ -695,7 +797,7 @@ int main(int argc, char *argv[])
 				ASACZ_CC2650_fw_update_header.fw_version_middle,
 				ASACZ_CC2650_fw_update_header.fw_version_minor
 				);
-		if (n >= sizeof(ASACZ_CC2650_fw_update_header.ascii_version_number))
+		if (n >= (int)sizeof(ASACZ_CC2650_fw_update_header.ascii_version_number))
 		{
 			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_sprint_ascii_version_number;
 		}
@@ -707,19 +809,27 @@ int main(int argc, char *argv[])
 		{
 			printf("Header info:\n");
 			printf("\t magic key  %s\n"	, ASACZ_CC2650_fw_update_header.magic_name);
+			printf("\t ASCII fw   %s\n"	, ASACZ_CC2650_fw_update_header.ascii_fw_type);
 			printf("\t ASCII ver. %s\n"	, ASACZ_CC2650_fw_update_header.ascii_version_number);
-			printf("\t date       %s\n"	, ASACZ_CC2650_fw_update_header.date);
+			printf("\t ASCII date %s\n"	, ASACZ_CC2650_fw_update_header.date);
+			printf("\t fw type    %u\n"	, ASACZ_CC2650_fw_update_header.fw_type);
 			printf("\t fw version %u.%u.%u\n"	, ASACZ_CC2650_fw_update_header.fw_version_major, ASACZ_CC2650_fw_update_header.fw_version_middle, ASACZ_CC2650_fw_update_header.fw_version_minor);
 			printf("\t body size  %u\n"			, ASACZ_CC2650_fw_update_header.firmware_body_size);
 			printf("\t body CRC   0x%08X\n"		, ASACZ_CC2650_fw_update_header.firmware_body_CRC32_CC2650);
-			printf("\t header CRC 0x%08X\n"	, ASACZ_CC2650_fw_update_header.header_CRC32_CC2650);
 		}
+	}
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
+		int header_CRC_size = sizeof(ASACZ_CC2650_fw_update_header) - sizeof(ASACZ_CC2650_fw_update_header.header_CRC32_CC2650);
+		ASACZ_CC2650_fw_update_header.header_CRC32_CC2650 = calcCrcLikeChip((const unsigned char *)&ASACZ_CC2650_fw_update_header, header_CRC_size);
+		printf("\t header CRC 0x%08X\n"	, ASACZ_CC2650_fw_update_header.header_CRC32_CC2650);
 	}
 	char outfile_name[1024];
 	memset(outfile_name, 0, sizeof(outfile_name));
 	if (r == enum_ASACZ_CC2650fw_retcode_OK)
 	{
-		int n = snprintf(outfile_name, sizeof(outfile_name), "ASACZ_CC2650fw.%u_%u_%u"
+		int n = snprintf(outfile_name, sizeof(outfile_name), "ASACZ_CC2650fw_%s.%u_%u_%u"
+				, ASACZ_CC2650_fw_update_header.ascii_fw_type
 				, ASACZ_CC2650_fw_update_header.fw_version_major
 				, ASACZ_CC2650_fw_update_header.fw_version_middle
 				, ASACZ_CC2650_fw_update_header.fw_version_minor
@@ -770,6 +880,18 @@ int main(int argc, char *argv[])
 	else
 	{
 		printf("Error %u\n", (uint32_t)r);
+		printf("Syntax: %s <binary file> <firmware type> <major> <middle> <minor>\n", argv[0] );
+		printf("<binary file> must contain the firmware");
+		printf("\t <firmware type> is in ");
+		{
+			unsigned int i;
+			for (i = 0; i < sizeof(fw_types_OK)/sizeof(fw_types_OK[0]); i++)
+			{
+				printf("%s ", fw_types_OK[i]);
+			}
+		}
+		printf("\n");
+		printf("<major> <middle> <minor> must be between 0 and 255");
 	}
 	return r;
 }
