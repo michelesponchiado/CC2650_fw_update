@@ -79,11 +79,13 @@
 	#endif
 #endif
 
+#ifndef OLINUXINO_LIB
 static void open_syslog(void)
 {
 	openlog("CC2650_fw_upd", LOG_PID|LOG_CONS, LOG_DAEMON);
 	syslog(LOG_INFO, "Log just started");
 }
+#endif
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -222,11 +224,11 @@ static int64_t get_current_epoch_time_ms(void)
 
 
 // Calculate crc32 checksum the way CC2538 and CC2650 does it.
-static int calcCrcLikeChip(const unsigned char *pData, unsigned long ulByteCount)
+static uint32_t calcCrcLikeChip(const unsigned char *pData, unsigned long ulByteCount)
 {
-    unsigned long d, ind;
-    unsigned long acc = 0xFFFFFFFF;
-    const unsigned long ulCrcRand32Lut[] =
+    uint32_t d, ind;
+    uint32_t acc = 0xFFFFFFFF;
+    const uint32_t ulCrcRand32Lut[] =
     {
         0x00000000, 0x1DB71064, 0x3B6E20C8, 0x26D930AC, 
         0x76DC4190, 0x6B6B51F4, 0x4DB26158, 0x5005713C, 
@@ -271,27 +273,27 @@ static void appProgress(uint32_t progress)
 #define DEVICE_CC26XX				0x2650
 #define CC2538_FLASH_BASE			0x00200000
 #define CC26XX_FLASH_BASE			0x00000000
-
+#ifndef OLINUXINO_LIB
 static void my_at_exit(void)
 {
-	// remove the reset from the CC2650
-	is_OK_do_CC2650_reset(0);
 	// at exit, close the system log
 	closelog();
 }
+#endif
 
-#ifdef __GLIBC__
+#ifdef OLINUXINO_LIB
 extern "C" enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_file)
 #else
 enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_file)
 #endif
 {
 	enum_do_CC2650_fw_update_retcode r = enum_do_CC2650_fw_update_retcode_OK;
-
+#ifndef OLINUXINO_LIB
 	open_syslog();
+	atexit(my_at_exit);
+#endif
 	syslog(LOG_INFO, "%s + starts", __func__);
 
-	atexit(my_at_exit);
 
 	//
 	// START: Program Configuration
@@ -507,6 +509,12 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_fil
 			syslog(LOG_ERR, "ERR_chip_reset_gone_bad");
 		}
 	}
+	// removes the reset from the CC2650
+	if (!is_OK_do_CC2650_reset(0))
+	{
+		r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_reset_the_chip_in_normal_mode;
+		syslog(LOG_ERR, "ERR_unable_to_reset_the_chip_in_normal_mode");
+	}
 
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
@@ -524,9 +532,245 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_fil
 }
 
 
-#ifndef __GLIBC__
-int main()
+#ifndef OLINUXINO_LIB
+// Syntax:
+// <input binary firmware file path>, <major firmware version number>, <middle...>, <minor...>
+// <major>, <middle> and <minor> must be numbers between 0 and 255
+// creates an output file named "ASACZ_CC2650fw.<major>_<middle>_<minor> that contains
+// an header filled with all of the informations (magic key, CRC etc) needed to do a safe update of a CC2650 firmware
+// for ASACZ application
+
+typedef enum
 {
-	 return do_CC2650_fw_update("/usr/znp_coordinator_pro_secure_linkkeyjoin_2_6_5.bin");
+	enum_ASACZ_CC2650fw_retcode_OK = 0,
+	enum_ASACZ_CC2650fw_retcode_ERR_incorrect_number_of_arguments,
+	enum_ASACZ_CC2650fw_retcode_ERR_incorrect_firmware_version_number_major,
+	enum_ASACZ_CC2650fw_retcode_ERR_incorrect_firmware_version_number_middle,
+	enum_ASACZ_CC2650fw_retcode_ERR_incorrect_firmware_version_number_minor,
+	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_open_input_file,
+	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_seek_end_input_file,
+	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_get_input_file_size,
+	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_seek_begin_input_file,
+	enum_ASACZ_CC2650fw_retcode_ERR_invalid_file_size,
+	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_alloc_input_file_body_buffer,
+	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_read_input_file_body,
+	enum_ASACZ_CC2650fw_retcode_ERR_close_input_file,
+	enum_ASACZ_CC2650fw_retcode_ERR_magic_name_too_long,
+	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_sprint_ascii_version_number,
+	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_sprint_date,
+	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_sprint_output_filename,
+	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_open_output_file,
+	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_write_header,
+	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_write_body,
+	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_close_output_file,
+
+	enum_ASACZ_CC2650fw_retcode_numof
+}enum_ASACZ_CC2650fw_retcode;
+
+int main(int argc, char *argv[])
+{
+	enum_ASACZ_CC2650fw_retcode r = enum_ASACZ_CC2650fw_retcode_OK;
+	char *filename_in = NULL;
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
+		if (argc < 5)
+		{
+			r = enum_ASACZ_CC2650fw_retcode_ERR_incorrect_number_of_arguments;
+		}
+	}
+	uint8_t fw_numbers[3];
+	memset(fw_numbers, 0, sizeof(fw_numbers));
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
+		filename_in = argv[1];
+		unsigned int i;
+		for (i = 0; i < 3; i++)
+		{
+			char * endptr;
+			long int n = strtol(argv[2 + i], &endptr, 0);
+			if ((*endptr != 0) || (n < 0) || (n > 255))
+			{
+				r = (enum_ASACZ_CC2650fw_retcode)(enum_ASACZ_CC2650fw_retcode_ERR_incorrect_firmware_version_number_major + i);
+				break;
+			}
+			fw_numbers[i] = n;
+		}
+	}
+	FILE *fin = NULL;
+	FILE *fout = NULL;
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
+		fin = fopen(filename_in, "rb");
+		if (!fin)
+		{
+			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_open_input_file;
+		}
+	}
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
+		int result = fseek(fin, 0L, SEEK_END);
+		if (result)
+		{
+			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_seek_end_input_file;
+		}
+	}
+	long l_filesize = 0;
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
+		l_filesize = ftell(fin);
+		if (l_filesize < 0)
+		{
+			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_get_input_file_size;
+		}
+		else if (l_filesize > 128 * 1024)
+		{
+			r = enum_ASACZ_CC2650fw_retcode_ERR_invalid_file_size;
+		}
+	}
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
+		int result = fseek(fin, 0L, SEEK_SET);
+		if (result)
+		{
+			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_seek_begin_input_file;
+		}
+	}
+	uint8_t * p_bin_file_body = NULL;
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
+		p_bin_file_body = (uint8_t *)malloc(l_filesize);
+		if (!p_bin_file_body)
+		{
+			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_alloc_input_file_body_buffer;
+		}
+		else
+		{
+			memset(p_bin_file_body, 0, l_filesize);
+		}
+	}
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
+		size_t n_read = fread(p_bin_file_body, l_filesize, 1, fin);
+		if (n_read != 1)
+		{
+			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_read_input_file_body;
+		}
+	}
+	if (fin)
+	{
+		if (fclose(fin))
+		{
+			if (r == enum_ASACZ_CC2650fw_retcode_OK)
+			{
+				r = enum_ASACZ_CC2650fw_retcode_ERR_close_input_file;
+			}
+		}
+	}
+	type_ASACZ_CC2650_fw_update_header ASACZ_CC2650_fw_update_header = {0};
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
+		int n_needed = snprintf((char*)ASACZ_CC2650_fw_update_header.magic_name, sizeof(ASACZ_CC2650_fw_update_header.magic_name), "%s", def_magic_name_ASACZ_CC2650_fw_update_header);
+		if (n_needed >= (int)sizeof(ASACZ_CC2650_fw_update_header.magic_name))
+		{
+			r = enum_ASACZ_CC2650fw_retcode_ERR_magic_name_too_long;
+		}
+	}
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
+		ASACZ_CC2650_fw_update_header.firmware_body_size = l_filesize;
+		ASACZ_CC2650_fw_update_header.fw_version_major = fw_numbers[0];
+		ASACZ_CC2650_fw_update_header.fw_version_middle = fw_numbers[1];
+		ASACZ_CC2650_fw_update_header.fw_version_minor = fw_numbers[2];
+		ASACZ_CC2650_fw_update_header.firmware_body_CRC32_CC2650 = calcCrcLikeChip((const unsigned char *)p_bin_file_body, ASACZ_CC2650_fw_update_header.firmware_body_size);
+		int header_CRC_size = sizeof(ASACZ_CC2650_fw_update_header) - sizeof(ASACZ_CC2650_fw_update_header.header_CRC32_CC2650);
+		ASACZ_CC2650_fw_update_header.header_CRC32_CC2650 = calcCrcLikeChip((const unsigned char *)&ASACZ_CC2650_fw_update_header, header_CRC_size);
+
+		time_t rawtime;
+		struct tm * timeinfo;
+
+		time (&rawtime);
+		timeinfo = localtime (&rawtime);
+		int n = snprintf((char *)ASACZ_CC2650_fw_update_header.ascii_version_number, sizeof(ASACZ_CC2650_fw_update_header.ascii_version_number), "%u.%u.%u",
+				ASACZ_CC2650_fw_update_header.fw_version_major,
+				ASACZ_CC2650_fw_update_header.fw_version_middle,
+				ASACZ_CC2650_fw_update_header.fw_version_minor
+				);
+		if (n >= sizeof(ASACZ_CC2650_fw_update_header.ascii_version_number))
+		{
+			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_sprint_ascii_version_number;
+		}
+		else if (!strftime ((char *)ASACZ_CC2650_fw_update_header.date, sizeof(ASACZ_CC2650_fw_update_header.date), "%Y %b %d",timeinfo))
+		{
+			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_sprint_date;
+		}
+		else
+		{
+			printf("Header info:\n");
+			printf("\t magic key  %s\n"	, ASACZ_CC2650_fw_update_header.magic_name);
+			printf("\t ASCII ver. %s\n"	, ASACZ_CC2650_fw_update_header.ascii_version_number);
+			printf("\t date       %s\n"	, ASACZ_CC2650_fw_update_header.date);
+			printf("\t fw version %u.%u.%u\n"	, ASACZ_CC2650_fw_update_header.fw_version_major, ASACZ_CC2650_fw_update_header.fw_version_middle, ASACZ_CC2650_fw_update_header.fw_version_minor);
+			printf("\t body size  %u\n"			, ASACZ_CC2650_fw_update_header.firmware_body_size);
+			printf("\t body CRC   0x%08X\n"		, ASACZ_CC2650_fw_update_header.firmware_body_CRC32_CC2650);
+			printf("\t header CRC 0x%08X\n"	, ASACZ_CC2650_fw_update_header.header_CRC32_CC2650);
+		}
+	}
+	char outfile_name[1024];
+	memset(outfile_name, 0, sizeof(outfile_name));
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
+		int n = snprintf(outfile_name, sizeof(outfile_name), "ASACZ_CC2650fw.%u_%u_%u"
+				, ASACZ_CC2650_fw_update_header.fw_version_major
+				, ASACZ_CC2650_fw_update_header.fw_version_middle
+				, ASACZ_CC2650_fw_update_header.fw_version_minor
+				);
+		if (n >= (int)sizeof(outfile_name))
+		{
+			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_sprint_output_filename;
+		}
+		else
+		{
+			fout = fopen(outfile_name, "wb");
+			if (!fout)
+			{
+				r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_open_output_file;
+			}
+		}
+	}
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
+		size_t n = fwrite(&ASACZ_CC2650_fw_update_header, sizeof(ASACZ_CC2650_fw_update_header), 1, fout);
+		if (n != 1)
+		{
+			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_write_header;
+		}
+	}
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
+		size_t n = fwrite(p_bin_file_body, l_filesize, 1, fout);
+		if (n != 1)
+		{
+			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_write_body;
+		}
+	}
+	if (fout)
+	{
+		if (fclose(fout))
+		{
+			if (r == enum_ASACZ_CC2650fw_retcode_OK)
+			{
+				r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_close_output_file;
+			}
+		}
+	}
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
+		printf("Output generated OK to %s\n", outfile_name);
+	}
+	else
+	{
+		printf("Error %u\n", (uint32_t)r);
+	}
+	return r;
 }
 #endif
