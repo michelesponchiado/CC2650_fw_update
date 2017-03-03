@@ -274,11 +274,17 @@ static void appProgress(uint32_t progress)
 }
 
 #ifdef OLINUXINO_LIB
+extern "C"
+#endif
 uint32_t get_CC2650_fw_update_progress(void)
 {
+#ifdef OLINUXINO_LIB
 	return percentage_progress;
-}
+#else
+	return 0;
 #endif
+
+}
 
 // Defines
 #define DEVICE_CC2538				0x2538
@@ -293,11 +299,50 @@ static void my_at_exit(void)
 }
 #endif
 
+
+const char *tbl_msg_CC2650_fw_update_retcode[]=
+{
+	"OK",							// firmware updated OK
+	"ERR_unable_to_reset_chip",				// unable to reset the CC2650 chip
+	"ERR_unable_to_create_SBL_object", 		// unable to create serial boot-loader library object
+	"ERR_unable_to_connect_with_the_chip",	// unable to connect with the chip
+	"ERR_unable_to_open_the_firmware_file", 	//
+	"ERR_unable_to_erase_the_flash",			// unable to erase the chips internal flash
+	"ERR_writing_flash",						//
+	"ERR_CRC_calculating_gone_bad",			//
+	"ERR_CRC_checking_gone_bad",				//
+	"ERR_chip_reset_gone_bad",				//
+	"ERR_unable_to_seek_to_the_file_end",	//
+	"ERR_unable_to_get_filesize",			//
+	"ERR_unable_to_seek_where_the_file_begins", //
+	"ERR_unable_to_allocate_the_read_buffer",
+	"ERR_unable_to_read_the_whole_file",
+	"ERR_unable_to_close_the_file",
+	"ERR_filesize_too_small",
+	"ERR_invalid_header_CRC32",
+	"ERR_invalid_header_magic_key",
+	"ERR_invalid_body_size",
+	"ERR_invalid_body_CRC",
+	"ERR_unable_to_reset_the_chip_in_normal_mode",
+	"ERR_invalid_operation_requested",
+};
+
 #ifdef OLINUXINO_LIB
-extern "C" enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_file)
-#else
-enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_file)
+extern "C"
 #endif
+const char * get_msg_from_CC2650_fw_update_retcode(enum_do_CC2650_fw_update_retcode r)
+{
+	if (r >= sizeof(tbl_msg_CC2650_fw_update_retcode) / sizeof(tbl_msg_CC2650_fw_update_retcode[0]))
+	{
+		return "UNKNOWN";
+	}
+	return tbl_msg_CC2650_fw_update_retcode[r];
+}
+
+#ifdef OLINUXINO_LIB
+extern "C"
+#endif
+enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation op, const char *path_binary_file, type_ASACZ_CC2650_fw_update_header *p_dst_header)
 {
 	enum_do_CC2650_fw_update_retcode r = enum_do_CC2650_fw_update_retcode_OK;
 #ifndef OLINUXINO_LIB
@@ -310,6 +355,28 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_fil
 	percentage_progress = 0;
 #endif
 
+	uint32_t do_fw_update = 0;
+
+	switch(op)
+	{
+		case enum_CC2650_fw_operation_update_firmware:
+		{
+			syslog(LOG_INFO, "%s firmware update requested", __func__);
+			do_fw_update = 1;
+			break;
+		}
+		case enum_CC2650_fw_operation_get_file_header_info:
+		{
+			syslog(LOG_INFO, "%s firmware file get header info requested", __func__);
+			break;
+		}
+		default:
+		{
+			syslog(LOG_ERR, "%s invalid operation requested %u", __func__, op);
+			r = enum_do_CC2650_fw_update_retcode_ERR_invalid_operation_requested;
+			break;
+		}
+	}
 
 	//
 	// START: Program Configuration
@@ -331,49 +398,82 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_fil
 	static std::ifstream file;		// File stream
 
 
-	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	fileName = path_binary_file;
+
+	if (do_fw_update)
 	{
-		if (!is_OK_do_CC2650_reset(1))
+		if (r == enum_do_CC2650_fw_update_retcode_OK)
 		{
-			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_reset_chip;
-	    	syslog(LOG_ERR, "ERR_unable_to_reset_chip");
+			if (!is_OK_do_CC2650_reset(1))
+			{
+				r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_reset_chip;
+				syslog(LOG_ERR, "ERR_unable_to_reset_chip");
+			}
+		}
+
+		if (r == enum_do_CC2650_fw_update_retcode_OK)
+		{
+
+			devFlashBase = CC26XX_FLASH_BASE;
+
+			//
+			// Set callback functions
+			//
+			SblDevice::setCallBackStatusFunction(&appStatus);
+			SblDevice::setCallBackProgressFunction(&appProgress);
+
+			//
+			// Create SBL object
+			//
+			pDevice = SblDevice::Create(deviceType);
+			if(pDevice == NULL)
+			{
+				r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_create_SBL_object;
+				syslog(LOG_ERR, "ERR_unable_to_create_SBL_object");
+			}
+		}
+		if (r == enum_do_CC2650_fw_update_retcode_OK)
+		{
+			unsigned int connected_OK = 0;
+#define def_max_try_connect_CC2650 40
+			int idx_try;
+			for (idx_try = 0; !connected_OK && idx_try < def_max_try_connect_CC2650; idx_try++)
+			{
+				if (idx_try)
+				{
+					syslog(LOG_INFO, "trying again closing and reopening the serial port, try %u of %u", idx_try +1, def_max_try_connect_CC2650);
+				}
+				else
+				{
+					syslog(LOG_INFO, "Sleeping before opening the serial port %s", def_selected_serial_port);
+				}
+				usleep(100*1000);
+				//
+				// Connect to device
+				//
+				syslog(LOG_INFO, "Opening the serial port %s", def_selected_serial_port);
+				if(pDevice->connect(def_selected_serial_port, false) != SBL_SUCCESS)
+				{
+					pDevice->CloseSerialPort();
+				}
+				else
+				{
+					connected_OK = 1;
+				}
+			}
+			if (connected_OK)
+			{
+				syslog(LOG_INFO, "device connected OK");
+			}
+			else
+			{
+				r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_connect_with_the_chip;
+				syslog(LOG_ERR, "Opening the serial port %s something went wrong", def_selected_serial_port);
+			}
 		}
 	}
 
-	if (r == enum_do_CC2650_fw_update_retcode_OK)
-	{
-		fileName = path_binary_file;
-		devFlashBase = CC26XX_FLASH_BASE;
-
-		//
-		// Set callback functions
-		//
-		SblDevice::setCallBackStatusFunction(&appStatus);
-		SblDevice::setCallBackProgressFunction(&appProgress);
-
-		//
-		// Create SBL object
-		//
-		pDevice = SblDevice::Create(deviceType);
-		if(pDevice == NULL)
-		{
-			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_create_SBL_object;
-	    	syslog(LOG_ERR, "ERR_unable_to_create_SBL_object");
-		}
-	}
-	if (r == enum_do_CC2650_fw_update_retcode_OK)
-	{
-		//
-		// Connect to device
-		//
-		syslog(LOG_INFO, "Opening the serial port %s", def_selected_serial_port);
-		if(pDevice->connect(def_selected_serial_port, false) != SBL_SUCCESS)
-		{
-			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_connect_with_the_chip;
-			syslog(LOG_INFO, "Opening the serial port %s something went wrong", def_selected_serial_port);
-		}
-	}
-
+	// read file with all of the checks needed
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
 		//
@@ -401,6 +501,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_fil
 			syslog(LOG_ERR, "unable to seek to the very end of the file");
 		}
 	}
+
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
 		byteCount = (uint32_t)file.tellg();
@@ -520,79 +621,91 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_fil
 			syslog(LOG_ERR, "header has invalid body CRC; header has %u, calculated is %u", p_header->firmware_body_CRC32_CC2650, fileCrc);
 		}
 	}
-
-	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	if (p_dst_header)
 	{
-
-		//
-		// Erasing as much flash needed to program firmware.
-		//
-		syslog(LOG_INFO, "erasing the flash...");
-		if(pDevice->eraseFlashRange(devFlashBase, body_size) != SBL_SUCCESS)
+		memset(p_dst_header, 0, sizeof(*p_dst_header));
+		if (r == enum_do_CC2650_fw_update_retcode_OK)
 		{
-			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_erase_the_flash;
-			syslog(LOG_ERR, "erasing the flash something went wrong");
+			memcpy(p_dst_header, p_header, sizeof(*p_dst_header));
 		}
 	}
 
-	if (r == enum_do_CC2650_fw_update_retcode_OK)
+	if (do_fw_update)
 	{
-		//
-		// Writing file to device flash memory.
-		//
-		syslog(LOG_INFO, "writing the flash...");
-		if(pDevice->writeFlashRange(devFlashBase, body_size, (const char *)p_firmware_body) != SBL_SUCCESS)
-		{
-			r = enum_do_CC2650_fw_update_retcode_ERR_writing_flash;
-			syslog(LOG_ERR, "writing the flash something went wrong");
-		}
-	}
 
-	if (r == enum_do_CC2650_fw_update_retcode_OK)
-	{
-		//
-		// Calculate CRC checksum of flashed content.
-		//
-		syslog(LOG_INFO, "Calculating the CRC...");
-		if(pDevice->calculateCrc32(devFlashBase, body_size, &devCrc) != SBL_SUCCESS)
+		if (r == enum_do_CC2650_fw_update_retcode_OK)
 		{
-			r = enum_do_CC2650_fw_update_retcode_ERR_CRC_calculating_gone_bad;
-			syslog(LOG_ERR, "Calculating the CRC something went wrong");
 
+			//
+			// Erasing as much flash needed to program firmware.
+			//
+			syslog(LOG_INFO, "erasing the flash...");
+			if(pDevice->eraseFlashRange(devFlashBase, body_size) != SBL_SUCCESS)
+			{
+				r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_erase_the_flash;
+				syslog(LOG_ERR, "erasing the flash something went wrong");
+			}
 		}
-	}
+
+		if (r == enum_do_CC2650_fw_update_retcode_OK)
+		{
+			//
+			// Writing file to device flash memory.
+			//
+			syslog(LOG_INFO, "writing the flash...");
+			if(pDevice->writeFlashRange(devFlashBase, body_size, (const char *)p_firmware_body) != SBL_SUCCESS)
+			{
+				r = enum_do_CC2650_fw_update_retcode_ERR_writing_flash;
+				syslog(LOG_ERR, "writing the flash something went wrong");
+			}
+		}
 	
-	if (r == enum_do_CC2650_fw_update_retcode_OK)
-	{
-		//
-		// Compare CRC checksums
-		//
-		if(fileCrc == devCrc)
+		if (r == enum_do_CC2650_fw_update_retcode_OK)
 		{
-			syslog(LOG_INFO, "The CRC compares OK");
-		}
-		else
-		{
-			r = enum_do_CC2650_fw_update_retcode_ERR_CRC_checking_gone_bad;
-			syslog(LOG_ERR, "The CRC are different: file is 0x%X, device gives 0x%X", fileCrc, devCrc);
-		}
-	}
-	if (r == enum_do_CC2650_fw_update_retcode_OK)
-	{
-		if(pDevice->reset() != SBL_SUCCESS)
-		{
-			r = enum_do_CC2650_fw_update_retcode_ERR_chip_reset_gone_bad;
-			syslog(LOG_ERR, "ERR_chip_reset_gone_bad");
-		}
-	}
+			//
+			// Calculate CRC checksum of flashed content.
+			//
+			syslog(LOG_INFO, "Calculating the CRC...");
+			if(pDevice->calculateCrc32(devFlashBase, body_size, &devCrc) != SBL_SUCCESS)
+			{
+				r = enum_do_CC2650_fw_update_retcode_ERR_CRC_calculating_gone_bad;
+				syslog(LOG_ERR, "Calculating the CRC something went wrong");
 
-	pDevice->CloseSerialPort();
+			}
+		}
 
-	// removes the reset from the CC2650
-	if (!is_OK_do_CC2650_reset(0))
-	{
-		r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_reset_the_chip_in_normal_mode;
-		syslog(LOG_ERR, "ERR_unable_to_reset_the_chip_in_normal_mode");
+		if (r == enum_do_CC2650_fw_update_retcode_OK)
+		{
+			//
+			// Compare CRC checksums
+			//
+			if(fileCrc == devCrc)
+			{
+				syslog(LOG_INFO, "The CRC compares OK");
+			}
+			else
+			{
+				r = enum_do_CC2650_fw_update_retcode_ERR_CRC_checking_gone_bad;
+				syslog(LOG_ERR, "The CRC are different: file is 0x%X, device gives 0x%X", fileCrc, devCrc);
+			}
+		}
+		if (r == enum_do_CC2650_fw_update_retcode_OK)
+		{
+			if(pDevice->reset() != SBL_SUCCESS)
+			{
+				r = enum_do_CC2650_fw_update_retcode_ERR_chip_reset_gone_bad;
+				syslog(LOG_ERR, "ERR_chip_reset_gone_bad");
+			}
+		}
+
+		pDevice->CloseSerialPort();
+
+		// removes the reset from the CC2650
+		if (!is_OK_do_CC2650_reset(0))
+		{
+			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_reset_the_chip_in_normal_mode;
+			syslog(LOG_ERR, "ERR_unable_to_reset_the_chip_in_normal_mode");
+		}
 	}
 
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
@@ -605,8 +718,6 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_update(const char *path_binary_fil
 	}
 	syslog(LOG_INFO, "%s - ends", __func__);
 	
-	syslog(LOG_INFO, "The application closes");
-
 	return r;
 }
 
