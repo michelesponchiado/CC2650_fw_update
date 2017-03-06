@@ -82,6 +82,10 @@ static void open_syslog(void)
 }
 #endif
 
+#ifdef ANDROID
+	extern int is_OK_do_CC2650_reset(unsigned int enable_boot_mode);
+#endif
+
 #ifndef ANDROID
 #include <sys/stat.h>
 #include <fcntl.h>
