@@ -304,7 +304,7 @@ SblDeviceCC2650::readFlashSize(uint32_t *pui32FlashSize)
     uint32_t value;
     if((retCode = readMemory32(addr, 1, &value)) != SBL_SUCCESS)
     {
-        setState((tSblStatus)retCode, "Failed to read device FLASH size: %s", getLastError().c_str());
+        setState((tSblStatus)retCode, "Failed to read device FLASH size: %s", getLastError());
         return retCode;
     }
     //
@@ -340,7 +340,7 @@ SblDeviceCC2650::readRamSize(uint32_t *pui32RamSize)
     uint32_t value;
     if((retCode = readMemory32(addr, 1, &value)) != SBL_SUCCESS)
     {
-        setState(retCode, "Failed to read device RAM size: %s", getLastError().c_str());
+        setState(retCode, "Failed to read device RAM size: %s", getLastError());
         return retCode;
     }
 
@@ -498,7 +498,7 @@ SblDeviceCC2650::eraseFlashRange(uint32_t ui32StartAddress,
         readStatus(&devStatus);
         if(devStatus != SblDeviceCC2650::CMD_RET_SUCCESS)
         {
-            setState(SBL_ERROR, "Flash erase failed. (Status 0x%02X = '%s'). Flash pages may be locked.\n", devStatus, getCmdStatusString(devStatus).c_str());
+            setState(SBL_ERROR, "Flash erase failed. (Status 0x%02X = '%s'). Flash pages may be locked.\n", devStatus, getCmdStatusString(devStatus));
             return SBL_ERROR;
         }
 
@@ -1203,7 +1203,7 @@ SblDeviceCC2650::writeFlashRange(uint32_t ui32StartAddress,
         }
         if(devStatus != SblDeviceCC2650::CMD_RET_SUCCESS)
         {
-            setState(SBL_ERROR, "Error during download initialization. Device returned status %d (%s).\n", devStatus, getCmdStatusString(devStatus).c_str());
+            setState(SBL_ERROR, "Error during download initialization. Device returned status %d (%s).\n", devStatus, getCmdStatusString(devStatus));
             return SBL_ERROR;
         }
 
@@ -1257,7 +1257,7 @@ SblDeviceCC2650::writeFlashRange(uint32_t ui32StartAddress,
                 }
                 if(devStatus != SblDeviceCC2650::CMD_RET_SUCCESS)
                 {
-                    setState(SBL_SUCCESS, "Device returned status %s\n", getCmdStatusString(devStatus).c_str());
+                    setState(SBL_SUCCESS, "Device returned status %s\n", getCmdStatusString(devStatus));
                     if(bIsRetry)
                     {
                         //
@@ -1446,7 +1446,7 @@ SblDeviceCC2650::sendCmd(uint32_t ui32Cmd, const char *pcSendData/* = NULL*/,
 
     if(writeBytes((unsigned char*)(&pvPkt[0]), pvPkt.size()) != (int)pvPkt.size())
     {
-        setState(SBL_PORT_ERROR, "Writing to device failed (Command '%s').\n", getCmdString(ui32Cmd).c_str());
+        setState(SBL_PORT_ERROR, "Writing to device failed (Command '%s').\n", getCmdString(ui32Cmd));
         return SBL_PORT_ERROR;
     }
     //
@@ -1521,7 +1521,7 @@ SblDeviceCC2650::initCommunication(bool bSetXosc)
  *      Returns std::string with name of device command.
  */
 //-----------------------------------------------------------------------------
-std::string
+const char *
 SblDeviceCC2650::getCmdString(uint32_t ui32Cmd)
 {
     switch(ui32Cmd)
@@ -1549,7 +1549,7 @@ SblDeviceCC2650::getCmdString(uint32_t ui32Cmd)
  *      Returns std::string with name of device status.
  */
 //-----------------------------------------------------------------------------
-std::string
+const char *
 SblDeviceCC2650::getCmdStatusString(uint32_t ui32Status)
 {
     switch(ui32Status)

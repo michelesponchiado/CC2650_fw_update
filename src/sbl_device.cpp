@@ -62,7 +62,7 @@
 //
 // Static  variables
 //
-std::string     SblDevice::sm_csLastError;
+char*     SblDevice::sm_csLastError;
 uint32_t        SblDevice::sm_progress = 0;
 tProgressFPTR   SblDevice::sm_pProgressFunction = NULL;
 tStatusFPTR     SblDevice::sm_pStatusFunction = NULL;
@@ -82,6 +82,7 @@ SblDevice::SblDevice()
     m_ramSize = 0;
     m_flashSize = 0;
     m_baudRate = 230400;
+    m_csComPort = (char*)"/dev/ttyS1";
 }
 
 
@@ -200,16 +201,16 @@ int32_t SblDevice::HasDataSerialPortDataMicroseconds(uint32_t usec)
  */
 //-----------------------------------------------------------------------------
 uint32_t 
-SblDevice::connect(std::string csPortNum, bool bEnableXosc/* = false*/)
+SblDevice::connect(const char* csPortNum, bool bEnableXosc/* = false*/)
 {
     int retCode = SBL_SUCCESS;
 
     //
     // Check input arguments
     //
-    if(csPortNum.empty())
+    if(!csPortNum || ! csPortNum[0])
     {
-        setState(SBL_ARGUMENT_ERROR, "Cannot connect. Port number '%s' is invalid.\n", csPortNum.c_str());
+        setState(SBL_ARGUMENT_ERROR, "Cannot connect. Port name is invalid.\n");
         return SBL_ARGUMENT_ERROR;
     }
 
@@ -223,13 +224,13 @@ SblDevice::connect(std::string csPortNum, bool bEnableXosc/* = false*/)
     {
     	struct termios tio;
 
-    	char* devpath = new char[csPortNum.length() + 1];
-    	strcpy(devpath, csPortNum.c_str());
+    	char* devpath = new char[strlen(csPortNum) + 1];
+    	strcpy(devpath, csPortNum);
     	/* open the device */
     	fd = open(devpath, O_RDWR | O_NOCTTY);
     	if (fd < 0)
     	{
-    		syslog(LOG_ERR, "%s: %s open failed", __func__, csPortNum.c_str());
+    		syslog(LOG_ERR, "%s: %s open failed", __func__, csPortNum);
     		return (-1);
     	}
 
@@ -260,7 +261,7 @@ SblDevice::connect(std::string csPortNum, bool bEnableXosc/* = false*/)
     	tcflush(fd, TCIFLUSH);
     	tcsetattr(fd, TCSANOW, &tio);
     }
-	m_csComPort = csPortNum;
+	m_csComPort = (char*)csPortNum;
 
     // Check if device is responding at the given baud rate
     if((retCode = initCommunication(bEnableXosc)) != SBL_SUCCESS)
@@ -434,7 +435,7 @@ SblDevice::sendCmdResponse(bool bAck)
     if(writeBytes(pData, 2) != 2)
     {
         setState(SBL_PORT_ERROR, "Failed to send ACK/NAK response over %s\n", 
-                 m_csComPort.c_str());
+                 m_csComPort);
         return SBL_PORT_ERROR;
     }
     return SBL_SUCCESS;
@@ -658,7 +659,7 @@ SblDevice::setState(const uint32_t &ui32Status, const char *pcFormat, ...)
     if(SblDevice::sm_pStatusFunction != NULL)
     {
         bool error = (m_lastSblStatus == SBL_SUCCESS) ? false : true;
-        sm_pStatusFunction((char *)sm_csLastError.c_str(), error);    
+        sm_pStatusFunction((char *)sm_csLastError, error);
     }
 
     return SBL_SUCCESS;

@@ -134,8 +134,8 @@ private:
     uint32_t cmdDownload(uint32_t ui32Address, uint32_t ui32Size);
     uint32_t cmdSendData(const char *pcData, uint32_t ui32ByteCount);
 
-    std::string getCmdString(uint32_t ui32Cmd);
-    std::string getCmdStatusString(uint32_t ui32Status);
+    const char* getCmdString(uint32_t ui32Cmd);
+    const char* getCmdStatusString(uint32_t ui32Status);
 
     uint32_t convertCmdForEarlySamples(uint32_t ui32Cmd);
 

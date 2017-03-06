@@ -38,7 +38,7 @@
 *  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *
 ******************************************************************************/
-#include <string>
+//#include <string>
 #include <stdint.h>
 
 #define SBL_MAX_DEVICES             20

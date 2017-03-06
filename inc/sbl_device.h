@@ -56,7 +56,7 @@ public:
     static SblDevice *Create(uint32_t ui32ChipType);
     void CloseSerialPort();
     virtual int32_t HasDataSerialPortDataMicroseconds(uint32_t usec);
-    virtual uint32_t connect(std::string csPortNum, bool bEnableXosc = false);
+    virtual uint32_t connect(const char* csPortNum, bool bEnableXosc = false);
     virtual uint32_t ping() = 0;
     virtual uint32_t readStatus(uint32_t *pui32Status) = 0;
     virtual uint32_t readDeviceId(uint32_t *pui32DeviceId) = 0;
@@ -87,7 +87,7 @@ public:
     uint32_t getBaudRate() { return m_baudRate;}
     uint32_t getLastStatus() {return m_lastSblStatus;}
     uint32_t getLastDeviceStatus() { return m_lastDeviceStatus;}
-    static std::string &getLastError(void) { return sm_csLastError;}
+    static char* &getLastError(void) { return sm_csLastError;}
     static uint32_t getProgress() { return sm_progress; }
     static uint32_t setProgress(uint32_t ui32Progress);
     static void setCallBackStatusFunction(tStatusFPTR pSf) {sm_pStatusFunction = pSf; }
@@ -120,7 +120,7 @@ protected:
     static void byteSwap(char *pcArray);
 
     int fd;
-    std::string m_csComPort;
+    char* m_csComPort;
     bool        m_bCommInitialized;
     uint32_t    m_baudRate;
 
@@ -132,7 +132,7 @@ protected:
     int32_t                 m_lastDeviceStatus;
     int32_t                 m_lastSblStatus;
     static uint32_t         sm_progress;
-    static std::string      sm_csLastError;
+    static char*      sm_csLastError;
     static tProgressFPTR    sm_pProgressFunction;
     static tStatusFPTR      sm_pStatusFunction;
 
