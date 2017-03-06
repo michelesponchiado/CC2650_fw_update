@@ -82,6 +82,7 @@ static void open_syslog(void)
 }
 #endif
 
+#ifndef ANDROID
 #include <sys/stat.h>
 #include <fcntl.h>
 static int is_OK_do_CC2650_reset(unsigned int enable_boot_mode)
@@ -192,6 +193,7 @@ static int is_OK_do_CC2650_reset(unsigned int enable_boot_mode)
 	syslog(LOG_INFO, "-%s returns is_OK = %u\n", __func__, is_OK);
 	return	is_OK;
 }
+#endif
 
 #if 0
 static int64_t get_current_epoch_time_ms(void)
