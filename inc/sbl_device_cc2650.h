@@ -65,7 +65,7 @@ class SblDeviceCC2650 : public SblDevice
 {
 public:
     SblDeviceCC2650();  // Constructor
-    ~SblDeviceCC2650(); // Destructor
+    virtual ~SblDeviceCC2650(); // Destructor
 
     enum {
         CMD_PING             = 0x20,

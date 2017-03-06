@@ -50,7 +50,7 @@ class SblDevice
 {
 public:
     // Constructor
-    ~SblDevice();
+    virtual ~SblDevice();
 
     // Static functions
     static SblDevice *Create(uint32_t ui32ChipType);
