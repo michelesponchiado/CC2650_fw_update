@@ -54,11 +54,6 @@
 #include <syslog.h>
 
 
-#include <vector>
-#include <iostream>
-#include <fstream>
-
-
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -390,12 +385,12 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 	//
 
 	SblDevice *pDevice = NULL;		// Pointer to SblDevice object
-	std::string fileName;			// File name to program
+	const char * fileName;			// File name to program
 	uint32_t byteCount = 0;			// File size in bytes
     uint32_t fileCrc, devCrc;		// Variables to save CRC checksum
 	uint32_t devFlashBase;	    	// Flash start address
-	static std::vector<char> pvWrite(1);// Vector to application firmware in.
-	static std::ifstream file;		// File stream
+	char * pvWrite = (char *)malloc(1);// Vector to application firmware in.
+	FILE * file;		// File stream
 
 
 	fileName = path_binary_file;
@@ -479,12 +474,12 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		//
 		// Read file
 		//
-		syslog(LOG_INFO, "Opening the file %s", fileName.c_str());
-		file.open(fileName.c_str(), std::ios::binary);
-		if( ! file.is_open())
+		syslog(LOG_INFO, "Opening the file %s", fileName);
+		file = fopen(fileName, "rb");
+		if( !file)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_open_the_firmware_file;
-			syslog(LOG_ERR, "unable to open the file %s", fileName.c_str());
+			syslog(LOG_ERR, "unable to open the file %s", fileName);
 		}
 	}
 
@@ -493,19 +488,18 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		//
 		// Get file size:
 		//
-		file.seekg(0, std::ios::end);
-		if (file.fail())
+		if (fseek(file, 0L, SEEK_END) != 0)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_seek_to_the_file_end;
-			//cout << "Unable to open file " << fileName.c_str();
 			syslog(LOG_ERR, "unable to seek to the very end of the file");
 		}
 	}
 
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
-		byteCount = (uint32_t)file.tellg();
-		if (file.fail())
+		long int ft = ftell(file);
+		byteCount = (uint32_t)ft;
+		if (ft < 0)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_get_filesize;
 			syslog(LOG_ERR, "unable to get the file size");
@@ -517,8 +511,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 	}
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
-		file.seekg(0, std::ios::beg);
-		if (file.fail())
+		if (fseek(file, 0L, SEEK_SET) != 0)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_seek_where_the_file_begins;
 			syslog(LOG_ERR, "unable to seek to the begin of the file");
@@ -529,11 +522,8 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		//
 		// Read data
 		//
-		try
-		{
-			pvWrite.resize(byteCount);
-		}
-		catch (std::bad_alloc const&)
+		pvWrite = (char*)realloc(pvWrite, byteCount);
+		if (!pvWrite)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_allocate_the_read_buffer;
 			syslog(LOG_ERR, "unable to allocate the read buffer");
@@ -541,8 +531,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 	}
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
-		file.read((char*) &pvWrite[0], byteCount);
-		if (file.fail())
+		if (fread((char*)&pvWrite[0], byteCount, 1, file) != 1)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_read_the_whole_file;
 			syslog(LOG_ERR, "unable to read the whole file");
@@ -550,12 +539,12 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 	}
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
-		file.close();
-		if (file.fail())
+		if (fclose(file) != 0)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_close_the_file;
 			syslog(LOG_ERR, "unable to close the file");
 		}
+		file = NULL;
 	}
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
@@ -707,7 +696,16 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 			syslog(LOG_ERR, "ERR_unable_to_reset_the_chip_in_normal_mode");
 		}
 	}
-
+	if (pvWrite)
+	{
+		free(pvWrite);
+		pvWrite = NULL;
+	}
+	if (file)
+	{
+		fclose(file);
+		file = NULL;
+	}
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
 		syslog(LOG_INFO, "Procedure ends OK");
@@ -1020,6 +1018,8 @@ int main(int argc, char *argv[])
 		printf("\n");
 		printf("<major> <middle> <minor> must be between 0 and 255");
 	}
+
+
 	return r;
 }
 #endif

@@ -43,7 +43,7 @@
 #include "sbl_device.h"
 #include "sbl_device_cc2650.h"
 
-#include <vector>
+//#include <vector>
 
 #define min(a, b) ( (a) <= (b) ? (a) : (b))
 
@@ -1102,7 +1102,7 @@ SblDeviceCC2650::writeFlashRange(uint32_t ui32StartAddress,
     uint32_t transferNumber = 1;
     bool bIsRetry = false;
     bool bBlToBeDisabled = false;
-    std::vector<tTransfer> pvTransfer;
+    tTransfer pvTransfer[2];
     uint32_t ui32TotChunks = (ui32ByteCount / SBL_CC2650_MAX_BYTES_PER_TRANSFER);
     if(ui32ByteCount % SBL_CC2650_MAX_BYTES_PER_TRANSFER) ui32TotChunks++;
     uint32_t ui32CurrChunk = 0;
@@ -1132,12 +1132,13 @@ SblDeviceCC2650::writeFlashRange(uint32_t ui32StartAddress,
         }
     }
 
+    uint32_t pvTransfer_size = 2;
     if(bBlToBeDisabled)
     {
         //
         // Split into two transfers
         //
-        pvTransfer.resize(2);
+    	pvTransfer_size = 2;
 
         //
         // Main transfer (before lock bit)
@@ -1158,7 +1159,7 @@ SblDeviceCC2650::writeFlashRange(uint32_t ui32StartAddress,
     }
     else
     {
-        pvTransfer.resize(1);
+    	pvTransfer_size = 1;
         pvTransfer[0].bExpectAck  = true;
         pvTransfer[0].byteCount = ui32ByteCount;
         pvTransfer[0].startAddr = ui32StartAddress;
@@ -1168,7 +1169,7 @@ SblDeviceCC2650::writeFlashRange(uint32_t ui32StartAddress,
     //
     // For each transfer
     //
-    for(uint32_t i = 0; i < pvTransfer.size(); i++)
+    for(uint32_t i = 0; i < pvTransfer_size; i++)
     {
         //
         // Sanity check
@@ -1426,15 +1427,15 @@ SblDeviceCC2650::sendCmd(uint32_t ui32Cmd, const char *pcSendData/* = NULL*/,
 
 
     unsigned char pktLen = ui32SendLen + 3; // +3 => <1b Length>, <1B cksum>, <1B cmd>
-    std::vector<char> pvPkt((pktLen));
+    char * pvPkt = (char*)malloc(pktLen * sizeof(char));
     unsigned char pktSum = generateCheckSum(ui32Cmd, pcSendData, ui32SendLen);
 
     //
     // Build packet
     //
-    pvPkt.at(0) = pktLen;
-    pvPkt.at(1) = pktSum;
-    pvPkt.at(2) = (unsigned char)ui32Cmd;
+    pvPkt[0] = pktLen;
+    pvPkt[1] = pktSum;
+    pvPkt[2] = (unsigned char)ui32Cmd;
     if(ui32SendLen)
     {
         memcpy(&pvPkt[3], pcSendData, ui32SendLen);
@@ -1444,7 +1445,7 @@ SblDeviceCC2650::sendCmd(uint32_t ui32Cmd, const char *pcSendData/* = NULL*/,
     // Send packet
     //
 
-    if(writeBytes((unsigned char*)(&pvPkt[0]), pvPkt.size()) != (int)pvPkt.size())
+    if(writeBytes((unsigned char*)(&pvPkt[0]), pktLen) != (int)pktLen)
     {
         setState(SBL_PORT_ERROR, "Writing to device failed (Command '%s').\n", getCmdString(ui32Cmd));
         return SBL_PORT_ERROR;
@@ -1452,8 +1453,7 @@ SblDeviceCC2650::sendCmd(uint32_t ui32Cmd, const char *pcSendData/* = NULL*/,
     //
     // Empty and dealloc vector
     //
-    pvPkt.clear();
-    std::vector<char>().swap(pvPkt);    
+    free(pvPkt);
         
     return SBL_SUCCESS;
 }
