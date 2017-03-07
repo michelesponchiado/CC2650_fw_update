@@ -82,122 +82,12 @@ static void open_syslog(void)
 }
 #endif
 
-#ifdef ANDROID
-	extern int is_OK_do_CC2650_reset(unsigned int enable_boot_mode);
+#ifdef OLINUXINO_LIB
+extern "C" int
+#else
+extern int
 #endif
-
-#ifndef ANDROID
-#include <sys/stat.h>
-#include <fcntl.h>
-static int is_OK_do_CC2650_reset(unsigned int enable_boot_mode)
-{
-	int is_OK = 1;
-#define gpio_base_path "/sys/class/gpio"
-#define gpio_export_path gpio_base_path"/export"
-#define gpio_value_path gpio_base_path"/value"
-
-	syslog(LOG_INFO, "+%s\n", __func__);
-	int fd_reset_low = -1;
-	int fd_boot_enable_high = -1;
-	char fname_reset[128];
-	char fname_boot_enable[128];
-	if (snprintf(fname_boot_enable, sizeof(fname_boot_enable), "%s/gpio0/value", gpio_base_path) < 0)
-	{
-		syslog(LOG_ERR, "ERROR doing snprintf %s\n", fname_boot_enable);
-		is_OK = 0;
-	}
-	else if (snprintf(fname_reset, sizeof(fname_reset), "%s/gpio12/value", gpio_base_path) < 0)
-	{
-		syslog(LOG_ERR, "ERROR doing snprintf reset %s\n", fname_reset);
-		is_OK = 0;
-	}
-	else
-	{
-		fd_reset_low = open((char *)fname_reset, O_WRONLY);
-		fd_boot_enable_high = open((char *)fname_boot_enable, O_WRONLY);
-		if (fd_reset_low < 0)
-		{
-			syslog(LOG_ERR, "ERROR doing open reset gpio %s", fname_reset);
-			is_OK = 0;
-		}
-		else if (fd_boot_enable_high < 0)
-		{
-			syslog(LOG_ERR, "ERROR doing open boot enable gpio %s", fname_boot_enable);
-			is_OK = 0;
-		}
-		else
-		{
-			typedef struct _type_cycle_op
-			{
-				unsigned int gpio_reset12_boot_0;
-				unsigned int value;
-				unsigned int delay_ms;
-			}type_cycle_op;
-			type_cycle_op cycle_op[3];
-
-			// reset low (Active) then wait 100ms
-			cycle_op[0].gpio_reset12_boot_0 = 12;
-			cycle_op[0].value = 0;
-			cycle_op[0].delay_ms = 100;
-
-			// boot enable high (Active)/ low (NOT active) then wait 200ms
-			cycle_op[1].gpio_reset12_boot_0 = 0;
-			cycle_op[1].value = enable_boot_mode ? 1 : 0;
-			cycle_op[1].delay_ms = 200;
-
-			// reset high (NOT Active) then wait 10ms
-			cycle_op[2].gpio_reset12_boot_0 = 12;
-			cycle_op[2].value = 1;
-			cycle_op[2].delay_ms = 10;
-#if 0
-			// boot enable low (NOT Active) then wait 10ms
-			cycle_op[3].gpio_reset12_boot_0 = 0;
-			cycle_op[3].value = 0;
-			cycle_op[3].delay_ms = 10;
-#endif
-			unsigned int idx_loop;
-			for (idx_loop = 0; is_OK && idx_loop < sizeof(cycle_op)/ sizeof(cycle_op[0]); idx_loop++)
-			{
-				type_cycle_op * p_cyc = &cycle_op[idx_loop];
-				char val[256];
-				int n= snprintf(val, sizeof(val), "%u", p_cyc->value);
-				if (n > 0)
-				{
-					int val_len = strlen(val);
-					int fd = p_cyc->gpio_reset12_boot_0 == 0 ? fd_boot_enable_high : fd_reset_low;
-					int n = write(fd, val, val_len);
-					if (n != val_len)
-					{
-						is_OK = 0;
-						syslog(LOG_ERR, "ERROR doing write value %u gpio %u OK", p_cyc->value, p_cyc->gpio_reset12_boot_0);
-					}
-					else
-					{
-						syslog(LOG_INFO, "set value %u gpio %u OK", p_cyc->value, p_cyc->gpio_reset12_boot_0);
-					}
-				}
-				else
-				{
-					is_OK = 0;
-					syslog(LOG_ERR, "ERR doing snprintf value %u gpio %u OK", p_cyc->value, p_cyc->gpio_reset12_boot_0);
-				}
-			}
-		}
-	}
-
-	if (fd_reset_low >= 0)
-	{
-		close(fd_reset_low);
-	}
-	if (fd_boot_enable_high >= 0)
-	{
-		close(fd_boot_enable_high);
-	}
-
-	syslog(LOG_INFO, "-%s returns is_OK = %u\n", __func__, is_OK);
-	return	is_OK;
-}
-#endif
+is_OK_do_CC2650_reset(unsigned int enable_boot_mode);
 
 #if 0
 static int64_t get_current_epoch_time_ms(void)
