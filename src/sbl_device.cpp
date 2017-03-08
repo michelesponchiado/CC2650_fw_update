@@ -374,7 +374,7 @@ SblDevice::getCmdResponse(bool &bAck,
     {
     	if (HasDataSerialPortDataMicroseconds(10000))
     	{
-            numBytes = read(fd,pIn, 2);
+            numBytes = read(fd,pIn + bytesRecv, 2 - bytesRecv);
             bytesRecv += numBytes;
     	}
         retry++;
