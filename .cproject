@@ -27,6 +27,9 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CC2650_fw_update/inc}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CC2650_fw_update/lib_inc}&quot;"/>
 								</option>
+								<option id="gnu.cpp.compiler.option.preprocessor.def.1253898011" superClass="gnu.cpp.compiler.option.preprocessor.def" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="LOCALMAIN=1"/>
+								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.1688378391" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>
 							<tool id="cdt.managedbuild.tool.gnu.c.compiler.exe.debug.173810425" name="GCC C Compiler" superClass="cdt.managedbuild.tool.gnu.c.compiler.exe.debug">

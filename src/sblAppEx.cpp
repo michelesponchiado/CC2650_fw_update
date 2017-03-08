@@ -74,6 +74,33 @@
 	#endif
 #endif
 
+// Calculate crc32 checksum the way CC2538 and CC2650 does it.
+static uint32_t calcCrcLikeChip(const unsigned char *pData, unsigned long ulByteCount)
+{
+    uint32_t d, ind;
+    uint32_t acc = 0xFFFFFFFF;
+    const uint32_t ulCrcRand32Lut[] =
+    {
+        0x00000000, 0x1DB71064, 0x3B6E20C8, 0x26D930AC,
+        0x76DC4190, 0x6B6B51F4, 0x4DB26158, 0x5005713C,
+        0xEDB88320, 0xF00F9344, 0xD6D6A3E8, 0xCB61B38C,
+        0x9B64C2B0, 0x86D3D2D4, 0xA00AE278, 0xBDBDF21C
+    };
+
+    while ( ulByteCount-- )
+    {
+        d = *pData++;
+        ind = (acc & 0x0F) ^ (d & 0x0F);
+        acc = (acc >> 4) ^ ulCrcRand32Lut[ind];
+        ind = (acc & 0x0F) ^ (d >> 4);
+        acc = (acc >> 4) ^ ulCrcRand32Lut[ind];
+    }
+
+    return (acc ^ 0xFFFFFFFF);
+}
+
+#ifndef LOCALMAIN
+
 #ifndef OLINUXINO_LIB
 static void open_syslog(void)
 {
@@ -114,30 +141,6 @@ static int64_t get_current_epoch_time_ms(void)
 #include <time.h>
 
 
-// Calculate crc32 checksum the way CC2538 and CC2650 does it.
-static uint32_t calcCrcLikeChip(const unsigned char *pData, unsigned long ulByteCount)
-{
-    uint32_t d, ind;
-    uint32_t acc = 0xFFFFFFFF;
-    const uint32_t ulCrcRand32Lut[] =
-    {
-        0x00000000, 0x1DB71064, 0x3B6E20C8, 0x26D930AC, 
-        0x76DC4190, 0x6B6B51F4, 0x4DB26158, 0x5005713C, 
-        0xEDB88320, 0xF00F9344, 0xD6D6A3E8, 0xCB61B38C, 
-        0x9B64C2B0, 0x86D3D2D4, 0xA00AE278, 0xBDBDF21C
-    };
-
-    while ( ulByteCount-- )
-    {
-        d = *pData++;
-        ind = (acc & 0x0F) ^ (d & 0x0F);
-        acc = (acc >> 4) ^ ulCrcRand32Lut[ind];
-        ind = (acc & 0x0F) ^ (d >> 4);
-        acc = (acc >> 4) ^ ulCrcRand32Lut[ind];
-    }
-
-    return (acc ^ 0xFFFFFFFF);
-}
 
 /// Application status function (used as SBL status callback)
 static void appStatus(char *pcText, bool bError)
@@ -622,12 +625,18 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 	return r;
 }
 
+#endif
+
 
 #ifndef OLINUXINO_LIB
 // Syntax:
-// <input binary firmware file path>, <major firmware version number>, <middle...>, <minor...>
+// <input binary firmware file path> <firmware type> <major firmware version number> <middle...> <minor...>
+// <input binary firmware file path> is the pathname of the binary input file
+// <firmware type> is in {"COORDINATOR","ROUTER","END_DEVICE"}
 // <major>, <middle> and <minor> must be numbers between 0 and 255
-// creates an output file named "ASACZ_CC2650fw.<major>_<middle>_<minor> that contains
+// e.g. calling with the arguments /home/michele/workspace/CC2650_fw_update/versions/znp_coordinator_pro_secure_linkkeyjoin_2_6_5.bin COORDINATOR 2 6 5
+// creates an output file named "ASACZ_CC2650fw_<firmware type>.<major>_<middle>_<minor> that contains
+// the filename will be ASACZ_CC2650fw_COORDINATOR.2_6_5
 // an header filled with all of the informations (magic key, CRC etc) needed to do a safe update of a CC2650 firmware
 // for ASACZ application
 
@@ -684,6 +693,7 @@ int main(int argc, char *argv[])
 	if (r == enum_ASACZ_CC2650fw_retcode_OK)
 	{
 		filename_in = argv[1];
+		printf("The input filename is %s\n", filename_in);
 		fw_type_in = argv[2];
 		unsigned int i;
 		unsigned int found_OK = 0;
@@ -693,6 +703,7 @@ int main(int argc, char *argv[])
 			{
 				fw_type = i;
 				found_OK = 1;
+				printf("The firmware type is %u (%s)\n", fw_type, fw_types_OK[fw_type]);
 				break;
 			}
 		}
@@ -715,6 +726,10 @@ int main(int argc, char *argv[])
 				break;
 			}
 			fw_numbers[i] = n;
+		}
+		if (r == enum_ASACZ_CC2650fw_retcode_OK)
+		{
+			printf("The firmware version is %u.%u.%u\n", fw_numbers[0], fw_numbers[1], fw_numbers[2]);
 		}
 	}
 	FILE *fin = NULL;
