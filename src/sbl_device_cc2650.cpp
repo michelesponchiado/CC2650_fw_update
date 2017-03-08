@@ -273,6 +273,7 @@ SblDeviceCC2650::readDeviceId(uint32_t *pui32DeviceId)
     //
     *pui32DeviceId = charArrayToUL(pId);
     m_deviceId = *pui32DeviceId;
+    setState(SBL_SUCCESS, "device id is %u\n", m_deviceId);
 
     //
     // Store device revision (used internally, see sbl_device_cc2650.h)
@@ -314,6 +315,7 @@ SblDeviceCC2650::readFlashSize(uint32_t *pui32FlashSize)
     *pui32FlashSize = value*SBL_CC2650_PAGE_ERASE_SIZE;
 
     m_flashSize = *pui32FlashSize;
+    setState(SBL_SUCCESS, "flash size is %u\n", m_flashSize);
 
     return SBL_SUCCESS;
 }
@@ -506,6 +508,7 @@ SblDeviceCC2650::eraseFlashRange(uint32_t ui32StartAddress,
             return SBL_ERROR;
         }
 
+        setState(SBL_SUCCESS, "Flash page erased OK %u / %u\n", i + 1, ui32PageCount);
         setProgress( 100*(i+1)/ui32PageCount );
     }
   

@@ -42,7 +42,7 @@
 #include <stdint.h>
 
 #define SBL_MAX_DEVICES             20
-#define SBL_DEFAULT_RETRY_COUNT     1
+#define SBL_DEFAULT_RETRY_COUNT     10
 #define SBL_DEFAULT_READ_TIMEOUT    100 // in ms
 #define SBL_DEFAULT_WRITE_TIMEOUT   200 // in ms
 

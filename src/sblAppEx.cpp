@@ -101,7 +101,7 @@ static uint32_t calcCrcLikeChip(const unsigned char *pData, unsigned long ulByte
 #ifdef TARGET_UBUNTU
 extern "C" int is_OK_do_CC2650_reset(unsigned int enable_boot_mode)
 {
-	enable_boot_mode;
+	//enable_boot_mode;
 	return 1;
 }
 #endif
@@ -542,7 +542,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 			//
 			// Erasing as much flash needed to program firmware.
 			//
-			my_log(LOG_INFO, "erasing the flash...");
+			my_log(LOG_INFO, "erasing the flash, body_size = %u...", body_size);
 			if(pDevice->eraseFlashRange(devFlashBase, body_size) != SBL_SUCCESS)
 			{
 				r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_erase_the_flash;
