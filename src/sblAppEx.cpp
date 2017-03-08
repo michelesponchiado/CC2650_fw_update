@@ -494,13 +494,14 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 	uint32_t body_size = 0;
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
+		body_size = p_header->firmware_body_size;
 		p_firmware_body = (unsigned char *)&pvWrite[0] + sizeof(type_ASACZ_CC2650_fw_update_header);
 		//
 		// Calculate file CRC checksum
 		//
-		syslog(LOG_INFO, "calculating the CRC");
+		syslog(LOG_ERR, "about to calculate the CRC");
 		fileCrc = calcCrcLikeChip(p_firmware_body, body_size);
-		syslog(LOG_INFO, "the CRC is 0x%X", fileCrc);
+		syslog(LOG_ERR, "the CRC is 0x%X", fileCrc);
 	}
 
 	// check if valid
