@@ -102,6 +102,7 @@ static uint32_t calcCrcLikeChip(const unsigned char *pData, unsigned long ulByte
 extern "C" int is_OK_do_CC2650_reset(unsigned int enable_boot_mode)
 {
 	enable_boot_mode;
+	return 1;
 }
 #endif
 
@@ -111,7 +112,7 @@ extern "C" int is_OK_do_CC2650_reset(unsigned int enable_boot_mode)
 static void open_syslog(void)
 {
 	openlog("CC2650_fw_upd", LOG_PID|LOG_CONS, LOG_DAEMON);
-	syslog(LOG_INFO, "Log just started");
+	my_log(LOG_INFO, "Log just started");
 }
 #endif
 
@@ -147,18 +148,18 @@ static int64_t get_current_epoch_time_ms(void)
 //
 #include <time.h>
 
-
+extern "C" void my_log(int print_level, const char *fmt, ...);
 
 /// Application status function (used as SBL status callback)
 static void appStatus(char *pcText, bool bError)
 {
     if(bError)
     {
-    	syslog(LOG_ERR, "%s", pcText);
+    	my_log(LOG_ERR, "%s", pcText);
     }
     else
     {
-    	syslog(LOG_INFO, "%s", pcText);
+    	my_log(LOG_INFO, "%s", pcText);
     }
 }
 
@@ -250,7 +251,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 	open_syslog();
 	atexit(my_at_exit);
 #endif
-	syslog(LOG_INFO, "%s + starts", __func__);
+	my_log(LOG_INFO, "%s + starts", __func__);
 
 #ifdef OLINUXINO_LIB
 	percentage_progress = 0;
@@ -262,18 +263,18 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 	{
 		case enum_CC2650_fw_operation_update_firmware:
 		{
-			syslog(LOG_INFO, "%s firmware update requested", __func__);
+			my_log(LOG_INFO, "%s firmware update requested", __func__);
 			do_fw_update = 1;
 			break;
 		}
 		case enum_CC2650_fw_operation_get_file_header_info:
 		{
-			syslog(LOG_INFO, "%s firmware file get header info requested", __func__);
+			my_log(LOG_INFO, "%s firmware file get header info requested", __func__);
 			break;
 		}
 		default:
 		{
-			syslog(LOG_ERR, "%s invalid operation requested %u", __func__, op);
+			my_log(LOG_ERR, "%s invalid operation requested %u", __func__, op);
 			r = enum_do_CC2650_fw_update_retcode_ERR_invalid_operation_requested;
 			break;
 		}
@@ -308,7 +309,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 			if (!is_OK_do_CC2650_reset(1))
 			{
 				r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_reset_chip;
-				syslog(LOG_ERR, "ERR_unable_to_reset_chip");
+				my_log(LOG_ERR, "ERR_unable_to_reset_chip");
 			}
 		}
 
@@ -330,7 +331,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 			if(pDevice == NULL)
 			{
 				r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_create_SBL_object;
-				syslog(LOG_ERR, "ERR_unable_to_create_SBL_object");
+				my_log(LOG_ERR, "ERR_unable_to_create_SBL_object");
 			}
 		}
 		if (r == enum_do_CC2650_fw_update_retcode_OK)
@@ -342,17 +343,17 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 			{
 				if (idx_try)
 				{
-					syslog(LOG_INFO, "trying again closing and reopening the serial port, try %u of %u", idx_try +1, def_max_try_connect_CC2650);
+					my_log(LOG_INFO, "trying again closing and reopening the serial port, try %u of %u", idx_try +1, def_max_try_connect_CC2650);
 				}
 				else
 				{
-					syslog(LOG_INFO, "Sleeping before opening the serial port %s", def_selected_serial_port);
+					my_log(LOG_INFO, "Sleeping before opening the serial port %s", def_selected_serial_port);
 				}
 				usleep(100*1000);
 				//
 				// Connect to device
 				//
-				syslog(LOG_INFO, "Opening the serial port %s", def_selected_serial_port);
+				my_log(LOG_INFO, "Opening the serial port %s", def_selected_serial_port);
 				if(pDevice->connect(def_selected_serial_port, false) != SBL_SUCCESS)
 				{
 					pDevice->CloseSerialPort();
@@ -364,12 +365,12 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 			}
 			if (connected_OK)
 			{
-				syslog(LOG_INFO, "device connected OK");
+				my_log(LOG_INFO, "device connected OK");
 			}
 			else
 			{
 				r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_connect_with_the_chip;
-				syslog(LOG_ERR, "Opening the serial port %s something went wrong", def_selected_serial_port);
+				my_log(LOG_ERR, "Opening the serial port %s something went wrong", def_selected_serial_port);
 			}
 		}
 	}
@@ -380,12 +381,12 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		//
 		// Read file
 		//
-		syslog(LOG_INFO, "Opening the file %s", fileName);
+		my_log(LOG_INFO, "Opening the file %s", fileName);
 		file = fopen(fileName, "rb");
 		if( !file)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_open_the_firmware_file;
-			syslog(LOG_ERR, "unable to open the file %s", fileName);
+			my_log(LOG_ERR, "unable to open the file %s", fileName);
 		}
 	}
 
@@ -397,7 +398,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		if (fseek(file, 0L, SEEK_END) != 0)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_seek_to_the_file_end;
-			syslog(LOG_ERR, "unable to seek to the very end of the file");
+			my_log(LOG_ERR, "unable to seek to the very end of the file");
 		}
 	}
 
@@ -408,11 +409,11 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		if (ft < 0)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_get_filesize;
-			syslog(LOG_ERR, "unable to get the file size");
+			my_log(LOG_ERR, "unable to get the file size");
 		}
 		else
 		{
-			syslog(LOG_INFO, "Number of bytes in the file: %u", byteCount);
+			my_log(LOG_INFO, "Number of bytes in the file: %u", byteCount);
 		}
 	}
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
@@ -420,7 +421,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		if (fseek(file, 0L, SEEK_SET) != 0)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_seek_where_the_file_begins;
-			syslog(LOG_ERR, "unable to seek to the begin of the file");
+			my_log(LOG_ERR, "unable to seek to the begin of the file");
 		}
 	}
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
@@ -432,7 +433,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		if (!pvWrite)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_allocate_the_read_buffer;
-			syslog(LOG_ERR, "unable to allocate the read buffer");
+			my_log(LOG_ERR, "unable to allocate the read buffer");
 		}
 	}
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
@@ -440,7 +441,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		if (fread((char*)&pvWrite[0], byteCount, 1, file) != 1)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_read_the_whole_file;
-			syslog(LOG_ERR, "unable to read the whole file");
+			my_log(LOG_ERR, "unable to read the whole file");
 		}
 	}
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
@@ -448,7 +449,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		if (fclose(file) != 0)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_close_the_file;
-			syslog(LOG_ERR, "unable to close the file");
+			my_log(LOG_ERR, "unable to close the file");
 		}
 		file = NULL;
 	}
@@ -457,7 +458,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		if (byteCount <= sizeof(type_ASACZ_CC2650_fw_update_header))
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_filesize_too_small;
-			syslog(LOG_ERR, "the file size is too small to contain both header and body");
+			my_log(LOG_ERR, "the file size is too small to contain both header and body");
 		}
 	}
 
@@ -468,17 +469,17 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		if (calc_crc_header != p_header->header_CRC32_CC2650)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_invalid_header_CRC32;
-			syslog(LOG_ERR, "header has invalid header CRC : calculated is 0x%08X, header has 0x%08X", calc_crc_header, p_header->header_CRC32_CC2650);
+			my_log(LOG_ERR, "header has invalid header CRC : calculated is 0x%08X, header has 0x%08X", calc_crc_header, p_header->header_CRC32_CC2650);
 		}
 		else
 		{
-			syslog(LOG_INFO, "magic key  %s"	, p_header->magic_name);
-			syslog(LOG_INFO, "ASCII ver. %s"	, p_header->ascii_version_number);
-			syslog(LOG_INFO, "date       %s"	, p_header->date);
-			syslog(LOG_INFO, "fw version %u.%u.%u"	, p_header->fw_version_major, p_header->fw_version_middle, p_header->fw_version_minor);
-			syslog(LOG_INFO, "body size  %u"		, p_header->firmware_body_size);
-			syslog(LOG_INFO, "BODY CRC   0x%08X"	, p_header->firmware_body_CRC32_CC2650);
-			syslog(LOG_INFO, "header CRC 0x%08X"	, p_header->header_CRC32_CC2650);
+			my_log(LOG_INFO, "magic key  %s"	, p_header->magic_name);
+			my_log(LOG_INFO, "ASCII ver. %s"	, p_header->ascii_version_number);
+			my_log(LOG_INFO, "date       %s"	, p_header->date);
+			my_log(LOG_INFO, "fw version %u.%u.%u"	, p_header->fw_version_major, p_header->fw_version_middle, p_header->fw_version_minor);
+			my_log(LOG_INFO, "body size  %u"		, p_header->firmware_body_size);
+			my_log(LOG_INFO, "BODY CRC   0x%08X"	, p_header->firmware_body_CRC32_CC2650);
+			my_log(LOG_INFO, "header CRC 0x%08X"	, p_header->header_CRC32_CC2650);
 		}
 	}
 
@@ -487,7 +488,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		if (strcmp((const char*)p_header->magic_name, (const char*)def_magic_name_ASACZ_CC2650_fw_update_header))
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_invalid_header_magic_key;
-			syslog(LOG_ERR, "header has invalid magic name %s", (const char*)p_header->magic_name);
+			my_log(LOG_ERR, "header has invalid magic name %s", (const char*)p_header->magic_name);
 		}
 	}
 
@@ -496,7 +497,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		if (p_header->firmware_body_size + sizeof(type_ASACZ_CC2650_fw_update_header) != byteCount)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_invalid_body_size;
-			syslog(LOG_ERR, "header has invalid body size; expected %u, read %u", p_header->firmware_body_size, (unsigned int)(byteCount - sizeof(type_ASACZ_CC2650_fw_update_header)));
+			my_log(LOG_ERR, "header has invalid body size; expected %u, read %u", p_header->firmware_body_size, (unsigned int)(byteCount - sizeof(type_ASACZ_CC2650_fw_update_header)));
 		}
 	}
 
@@ -509,9 +510,9 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		//
 		// Calculate file CRC checksum
 		//
-		syslog(LOG_ERR, "about to calculate the CRC");
+		my_log(LOG_ERR, "about to calculate the CRC");
 		fileCrc = calcCrcLikeChip(p_firmware_body, body_size);
-		syslog(LOG_ERR, "the CRC is 0x%X", fileCrc);
+		my_log(LOG_ERR, "the CRC is 0x%X", fileCrc);
 	}
 
 	// check if valid
@@ -520,7 +521,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		if (fileCrc != p_header->firmware_body_CRC32_CC2650)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_invalid_body_CRC;
-			syslog(LOG_ERR, "header has invalid body CRC; header has %u, calculated is %u", p_header->firmware_body_CRC32_CC2650, fileCrc);
+			my_log(LOG_ERR, "header has invalid body CRC; header has %u, calculated is %u", p_header->firmware_body_CRC32_CC2650, fileCrc);
 		}
 	}
 	if (p_dst_header)
@@ -541,11 +542,11 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 			//
 			// Erasing as much flash needed to program firmware.
 			//
-			syslog(LOG_INFO, "erasing the flash...");
+			my_log(LOG_INFO, "erasing the flash...");
 			if(pDevice->eraseFlashRange(devFlashBase, body_size) != SBL_SUCCESS)
 			{
 				r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_erase_the_flash;
-				syslog(LOG_ERR, "erasing the flash something went wrong");
+				my_log(LOG_ERR, "erasing the flash something went wrong");
 			}
 		}
 
@@ -554,11 +555,11 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 			//
 			// Writing file to device flash memory.
 			//
-			syslog(LOG_INFO, "writing the flash...");
+			my_log(LOG_INFO, "writing the flash...");
 			if(pDevice->writeFlashRange(devFlashBase, body_size, (const char *)p_firmware_body) != SBL_SUCCESS)
 			{
 				r = enum_do_CC2650_fw_update_retcode_ERR_writing_flash;
-				syslog(LOG_ERR, "writing the flash something went wrong");
+				my_log(LOG_ERR, "writing the flash something went wrong");
 			}
 		}
 	
@@ -567,11 +568,11 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 			//
 			// Calculate CRC checksum of flashed content.
 			//
-			syslog(LOG_INFO, "Calculating the CRC...");
+			my_log(LOG_INFO, "Calculating the CRC...");
 			if(pDevice->calculateCrc32(devFlashBase, body_size, &devCrc) != SBL_SUCCESS)
 			{
 				r = enum_do_CC2650_fw_update_retcode_ERR_CRC_calculating_gone_bad;
-				syslog(LOG_ERR, "Calculating the CRC something went wrong");
+				my_log(LOG_ERR, "Calculating the CRC something went wrong");
 
 			}
 		}
@@ -583,12 +584,12 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 			//
 			if(fileCrc == devCrc)
 			{
-				syslog(LOG_INFO, "The CRC compares OK");
+				my_log(LOG_INFO, "The CRC compares OK");
 			}
 			else
 			{
 				r = enum_do_CC2650_fw_update_retcode_ERR_CRC_checking_gone_bad;
-				syslog(LOG_ERR, "The CRC are different: file is 0x%X, device gives 0x%X", fileCrc, devCrc);
+				my_log(LOG_ERR, "The CRC are different: file is 0x%X, device gives 0x%X", fileCrc, devCrc);
 			}
 		}
 		if (r == enum_do_CC2650_fw_update_retcode_OK)
@@ -596,7 +597,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 			if(pDevice->reset() != SBL_SUCCESS)
 			{
 				r = enum_do_CC2650_fw_update_retcode_ERR_chip_reset_gone_bad;
-				syslog(LOG_ERR, "ERR_chip_reset_gone_bad");
+				my_log(LOG_ERR, "ERR_chip_reset_gone_bad");
 			}
 		}
 
@@ -606,7 +607,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		if (!is_OK_do_CC2650_reset(0))
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_reset_the_chip_in_normal_mode;
-			syslog(LOG_ERR, "ERR_unable_to_reset_the_chip_in_normal_mode");
+			my_log(LOG_ERR, "ERR_unable_to_reset_the_chip_in_normal_mode");
 		}
 	}
 	if (pvWrite)
@@ -621,13 +622,13 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 	}
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
-		syslog(LOG_INFO, "Procedure ends OK");
+		my_log(LOG_INFO, "Procedure ends OK");
 	}
 	else
 	{
-		syslog(LOG_ERR, "Procedure ends with error: %u", (uint32_t)r);
+		my_log(LOG_ERR, "Procedure ends with error: %u", (uint32_t)r);
 	}
-	syslog(LOG_INFO, "%s - ends", __func__);
+	my_log(LOG_INFO, "%s - ends", __func__);
 	
 	return r;
 }
