@@ -454,6 +454,7 @@ SblDeviceCC2650::eraseFlashRange(uint32_t ui32StartAddress,
     // 
     if(!isConnected())
     {
+        setState(SBL_ERROR, "Flash erase failed. Not connected\n");
         return SBL_PORT_ERROR;
     }
 
@@ -477,6 +478,7 @@ SblDeviceCC2650::eraseFlashRange(uint32_t ui32StartAddress,
         //
         if((retCode = sendCmd(SblDeviceCC2650::CMD_SECTOR_ERASE, pcPayload, 4)) != SBL_SUCCESS)
         {
+            setState(SBL_ERROR, "Flash erase failed. Unable to send command i = %u, ui32PageCount = %u\n", i, ui32PageCount);
             return retCode;        
         }
 
@@ -485,10 +487,12 @@ SblDeviceCC2650::eraseFlashRange(uint32_t ui32StartAddress,
         //
         if((retCode = getCmdResponse(bSuccess)) != SBL_SUCCESS)
         {
+            setState(SBL_ERROR, "Flash erase failed. Unable to get response\n");
             return retCode;
         }
         if(!bSuccess)
         {
+            setState(SBL_ERROR, "Flash erase failed. Response was not giving success\n");
             return SBL_ERROR;
         }
 
@@ -506,6 +510,7 @@ SblDeviceCC2650::eraseFlashRange(uint32_t ui32StartAddress,
     }
   
 
+    setState(SBL_SUCCESS, "Flash erase OK\n");
     return SBL_SUCCESS;
 }
 
