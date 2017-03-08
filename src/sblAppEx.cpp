@@ -98,6 +98,12 @@ static uint32_t calcCrcLikeChip(const unsigned char *pData, unsigned long ulByte
 
     return (acc ^ 0xFFFFFFFF);
 }
+#ifdef TARGET_UBUNTU
+extern "C" int is_OK_do_CC2650_reset(unsigned int enable_boot_mode)
+{
+	enable_boot_mode;
+}
+#endif
 
 #ifndef LOCALMAIN
 
@@ -115,6 +121,7 @@ extern "C" int
 extern int
 #endif
 is_OK_do_CC2650_reset(unsigned int enable_boot_mode);
+
 
 #if 0
 static int64_t get_current_epoch_time_ms(void)
