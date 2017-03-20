@@ -74,8 +74,12 @@
 	#endif
 #endif
 
-// Calculate crc32 checksum the way CC2538 and CC2650 does it.
-static uint32_t calcCrcLikeChip(const unsigned char *pData, unsigned long ulByteCount)
+#ifdef OLINUXINO_LIB
+extern "C"
+#else
+extern
+#endif// Calculate crc32 checksum the way CC2538 and CC2650 does it.
+uint32_t calcCrcLikeChip(const unsigned char *pData, unsigned long ulByteCount)
 {
     uint32_t d, ind;
     uint32_t acc = 0xFFFFFFFF;

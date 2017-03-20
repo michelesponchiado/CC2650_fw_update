@@ -77,3 +77,11 @@ extern "C"
 #endif
 uint32_t get_CC2650_fw_update_progress(void);
 #endif /* INC_CC2650_FW_UPDATE_H_ */
+
+
+#ifdef OLINUXINO_LIB
+extern "C"
+#else
+extern
+#endif// Calculate crc32 checksum the way CC2538 and CC2650 does it.
+uint32_t calcCrcLikeChip(const unsigned char *pData, unsigned long ulByteCount);
