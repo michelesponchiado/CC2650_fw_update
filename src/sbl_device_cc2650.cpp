@@ -446,6 +446,7 @@ uint32_t
 SblDeviceCC2650::eraseFlashRange(uint32_t ui32StartAddress, 
                                  uint32_t ui32ByteCount)
 {
+	enum_progress_sbl progress_sbl = enum_progress_sbl_erase_flash;
     uint32_t retCode = SBL_SUCCESS;
     bool bSuccess = false;
     char pcPayload[4];
@@ -465,7 +466,7 @@ SblDeviceCC2650::eraseFlashRange(uint32_t ui32StartAddress,
     //
     uint32_t ui32PageCount = ui32ByteCount / SBL_CC2650_PAGE_ERASE_SIZE;
     if( ui32ByteCount % SBL_CC2650_PAGE_ERASE_SIZE) ui32PageCount ++;
-    setProgress( 0 );
+    setProgress( progress_sbl, 0 );
     for(uint32_t i = 0; i < ui32PageCount; i++)
     {
 
@@ -509,7 +510,7 @@ SblDeviceCC2650::eraseFlashRange(uint32_t ui32StartAddress,
         }
 
         setState(SBL_SUCCESS, "Flash page erased OK %u / %u\n", i + 1, ui32PageCount);
-        setProgress( 100*(i+1)/ui32PageCount );
+        setProgress( progress_sbl, 100*(i+1)/ui32PageCount );
     }
   
 
@@ -537,6 +538,7 @@ uint32_t
 SblDeviceCC2650::readMemory32(uint32_t ui32StartAddress, uint32_t ui32UnitCount, 
                               uint32_t *pui32Data)
 {
+	enum_progress_sbl progress_sbl = enum_progress_sbl_read_memory32;
     int retCode = SBL_SUCCESS;
     bool bSuccess = false;
 
@@ -552,7 +554,7 @@ SblDeviceCC2650::readMemory32(uint32_t ui32StartAddress, uint32_t ui32UnitCount,
     //
     // Set progress
     //
-    setProgress(0);
+    setProgress(progress_sbl, 0);
 
     if(!isConnected())
     {
@@ -584,7 +586,7 @@ SblDeviceCC2650::readMemory32(uint32_t ui32StartAddress, uint32_t ui32UnitCount,
 		//
         // Set progress
         //
-        setProgress(((i * 100) / chunkCount));
+        setProgress(progress_sbl, ((i * 100) / chunkCount));
 
         //
         // Send command
@@ -641,7 +643,7 @@ SblDeviceCC2650::readMemory32(uint32_t ui32StartAddress, uint32_t ui32UnitCount,
     //
     // Set progress
     //
-    setProgress(100);
+    setProgress(progress_sbl, 100);
 
     return SBL_SUCCESS;
 }
@@ -665,6 +667,8 @@ uint32_t
 SblDeviceCC2650::readMemory8(uint32_t ui32StartAddress, uint32_t ui32UnitCount, 
                               char *pcData)
 {
+	enum_progress_sbl progress_sbl = enum_progress_sbl_read_memory8;
+
     int retCode = SBL_SUCCESS;
     bool bSuccess = false;
 
@@ -707,7 +711,7 @@ SblDeviceCC2650::readMemory8(uint32_t ui32StartAddress, uint32_t ui32UnitCount,
 		//
 		// Set progress
 		//
-		setProgress( ((i*100) / chunkCount));
+		setProgress( progress_sbl, ((i*100) / chunkCount));
 
 		//
 		// Send command
@@ -761,7 +765,7 @@ SblDeviceCC2650::readMemory8(uint32_t ui32StartAddress, uint32_t ui32UnitCount,
     //
     // Set progress
     //
-    setProgress(100);
+    setProgress(progress_sbl, 100);
 
     return SBL_SUCCESS;
 }
@@ -788,6 +792,7 @@ SblDeviceCC2650::writeMemory32(uint32_t ui32StartAddress,
                                uint32_t ui32UnitCount, 
                                const uint32_t *pui32Data)
 {
+	enum_progress_sbl progress_sbl = enum_progress_sbl_write_memory32;
     uint32_t retCode = SBL_SUCCESS;
     bool bSuccess = false;
     
@@ -840,7 +845,7 @@ SblDeviceCC2650::writeMemory32(uint32_t ui32StartAddress,
 		//
 		// Set progress
 		//
-		setProgress( ((i * 100) / chunkCount) );
+		setProgress( progress_sbl, ((i * 100) / chunkCount) );
 
 		//
 		// Send command
@@ -867,7 +872,7 @@ SblDeviceCC2650::writeMemory32(uint32_t ui32StartAddress,
     //
     // Set progress
     //
-	setProgress(100);
+	setProgress(progress_sbl, 100);
 
 	//
 	// Cleanup
@@ -899,6 +904,8 @@ SblDeviceCC2650::writeMemory8(uint32_t ui32StartAddress,
                               uint32_t ui32UnitCount, 
                               const char *pcData)
 {
+	enum_progress_sbl progress_sbl = enum_progress_sbl_write_memory8;
+
     uint32_t retCode = SBL_SUCCESS;
     bool bSuccess = false;
     
@@ -943,7 +950,7 @@ SblDeviceCC2650::writeMemory8(uint32_t ui32StartAddress,
 		//
 		// Set progress
 		//
-		setProgress( ((i * 100) / chunkCount) );
+		setProgress( progress_sbl, ((i * 100) / chunkCount) );
 
 		//
 		// Send command
@@ -970,7 +977,7 @@ SblDeviceCC2650::writeMemory8(uint32_t ui32StartAddress,
     //
     // Set progress
     //
-	setProgress(100);
+	setProgress(progress_sbl, 100);
 
 	//
 	// Cleanup
@@ -1000,6 +1007,8 @@ uint32_t
 SblDeviceCC2650::calculateCrc32(uint32_t ui32StartAddress, 
                                 uint32_t ui32ByteCount, uint32_t *pui32Crc)
 {
+	enum_progress_sbl progress_sbl = enum_progress_sbl_calc_CRC32;
+
     uint32_t retCode = SBL_SUCCESS;
     bool bSuccess = false;
     char pcPayload[12];
@@ -1023,7 +1032,7 @@ SblDeviceCC2650::calculateCrc32(uint32_t ui32StartAddress,
     //
     // Set progress
     //
-    setProgress(0);
+    setProgress(progress_sbl, 0);
 
     //
     // Build payload
@@ -1077,7 +1086,7 @@ SblDeviceCC2650::calculateCrc32(uint32_t ui32StartAddress,
     //
     // Set progress
     //
-    setProgress(100);
+    setProgress(progress_sbl, 100);
 
     return SBL_SUCCESS;
 }
@@ -1104,6 +1113,8 @@ uint32_t
 SblDeviceCC2650::writeFlashRange(uint32_t ui32StartAddress, 
                                  uint32_t ui32ByteCount, const char *pcData)
 {
+	enum_progress_sbl progress_sbl = enum_progress_sbl_write_flash;
+
     uint32_t devStatus = SblDeviceCC2650::CMD_RET_UNKNOWN_CMD;
     uint32_t retCode = SBL_SUCCESS;
     uint32_t bytesLeft, dataIdx, bytesInTransfer;
@@ -1139,6 +1150,8 @@ SblDeviceCC2650::writeFlashRange(uint32_t ui32StartAddress,
             setState(SBL_SUCCESS, "Warning: CC2650 bootloader will be disabled.\n");
         }
     }
+
+    setProgress( progress_sbl, 0);
 
     uint32_t pvTransfer_size = 2;
     if(bBlToBeDisabled)
@@ -1227,7 +1240,7 @@ SblDeviceCC2650::writeFlashRange(uint32_t ui32StartAddress,
             // Set progress
             //
             //setProgress(addressToPage(ui32StartAddress + dataIdx));
-            setProgress( ((100*(++ui32CurrChunk))/ui32TotChunks) );
+            setProgress( progress_sbl, ((100*(++ui32CurrChunk))/ui32TotChunks) );
 
             //
             // Limit transfer count

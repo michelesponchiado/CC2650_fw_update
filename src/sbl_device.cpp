@@ -747,11 +747,11 @@ SblDevice::byteSwap(char *pcArray)
  */
 //-----------------------------------------------------------------------------
 /*static*/uint32_t
-SblDevice::setProgress(uint32_t ui32Progress)
+SblDevice:: setProgress(enum_progress_sbl e, uint32_t ui32Progress)
 {
     if(sm_pProgressFunction)
     {
-        sm_pProgressFunction(ui32Progress);
+        sm_pProgressFunction(e, ui32Progress);
     }
 
     sm_progress = ui32Progress;

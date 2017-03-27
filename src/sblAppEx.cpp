@@ -169,13 +169,40 @@ static void appStatus(char *pcText, bool bError)
 
 #ifdef OLINUXINO_LIB
 static uint32_t percentage_progress = 0;
+typedef struct _type_sbl_progress
+{
+	uint32_t phase_progress[enum_progress_sbl_numof];
+	uint32_t overall_progress;
+}type_sbl_progress;
+type_sbl_progress the_sbl_progress;
+void init_sbl_progress(void)
+{
+	memset(&the_sbl_progress, 0, sizeof(the_sbl_progress));
+}
+void update_sbl_progress(enum_progress_sbl e, uint32_t progress)
+{
+	if (e >= enum_progress_sbl_numof)
+	{
+		return;
+	}
+	if (progress > 100)
+	{
+		progress = 100;
+	}
+	if (the_sbl_progress.phase_progress[e] < progress)
+	{
+		the_sbl_progress.phase_progress[e] = progress;
+	}
+	the_sbl_progress.overall_progress = (100 * the_sbl_progress.phase_progress[enum_progress_sbl_write_flash] + 28 * the_sbl_progress.phase_progress[enum_progress_sbl_erase_flash]) / 128;
+}
 #endif
 
 /// Application progress function (used as SBL progress callback)
-static void appProgress(uint32_t progress)
+static void appProgress(enum_progress_sbl e, uint32_t progress)
 {
 #ifdef OLINUXINO_LIB
-	percentage_progress = progress;
+	update_sbl_progress(e, progress);
+	percentage_progress = the_sbl_progress.overall_progress;
 #endif
 }
 
@@ -256,6 +283,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 	atexit(my_at_exit);
 #endif
 	my_log(LOG_INFO, "%s + starts", __func__);
+	init_sbl_progress();
 
 #ifdef OLINUXINO_LIB
 	percentage_progress = 0;

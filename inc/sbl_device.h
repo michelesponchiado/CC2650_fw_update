@@ -39,11 +39,23 @@
 *
 ******************************************************************************/
 
+typedef enum
+{
+	enum_progress_sbl_erase_flash = 0,
+	enum_progress_sbl_read_memory32,
+	enum_progress_sbl_read_memory8,
+	enum_progress_sbl_write_memory32,
+	enum_progress_sbl_write_memory8,
+	enum_progress_sbl_calc_CRC32,
+	enum_progress_sbl_write_flash,
+	enum_progress_sbl_numof,
+}enum_progress_sbl;
+
 //
 // Typedefs for callback functions to report status and progress to application
 //
 typedef void (*tStatusFPTR)(char *pcText, bool bError);
-typedef void (*tProgressFPTR)(uint32_t ui32Value);
+typedef void (*tProgressFPTR)(enum_progress_sbl e, uint32_t ui32Value);
 
 
 class SblDevice
@@ -89,7 +101,7 @@ public:
     uint32_t getLastDeviceStatus() { return m_lastDeviceStatus;}
     static char* &getLastError(void) { return sm_csLastError;}
     static uint32_t getProgress() { return sm_progress; }
-    static uint32_t setProgress(uint32_t ui32Progress);
+    static uint32_t setProgress(enum_progress_sbl e, uint32_t ui32Progress);
     static void setCallBackStatusFunction(tStatusFPTR pSf) {sm_pStatusFunction = pSf; }
     static void setCallBackProgressFunction(tProgressFPTR pPf) {sm_pProgressFunction = pPf; }
 
