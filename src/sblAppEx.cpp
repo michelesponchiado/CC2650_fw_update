@@ -811,22 +811,22 @@ int main(int argc, char *argv[])
 			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_seek_begin_input_file;
 		}
 	}
-	uint8_t * p_bin_file_body = NULL;
+	uint8_t * p_bin_file_body_malloced = NULL;
 	if (r == enum_ASACZ_CC2650fw_retcode_OK)
 	{
-		p_bin_file_body = (uint8_t *)malloc(l_filesize);
-		if (!p_bin_file_body)
+		p_bin_file_body_malloced = (uint8_t *)malloc(l_filesize);
+		if (!p_bin_file_body_malloced)
 		{
 			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_alloc_input_file_body_buffer;
 		}
 		else
 		{
-			memset(p_bin_file_body, 0, l_filesize);
+			memset(p_bin_file_body_malloced, 0, l_filesize);
 		}
 	}
 	if (r == enum_ASACZ_CC2650fw_retcode_OK)
 	{
-		size_t n_read = fread(p_bin_file_body, l_filesize, 1, fin);
+		size_t n_read = fread(p_bin_file_body_malloced, l_filesize, 1, fin);
 		if (n_read != 1)
 		{
 			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_read_input_file_body;
@@ -868,7 +868,7 @@ int main(int argc, char *argv[])
 		ASACZ_CC2650_fw_update_header.fw_version_major = fw_numbers[0];
 		ASACZ_CC2650_fw_update_header.fw_version_middle = fw_numbers[1];
 		ASACZ_CC2650_fw_update_header.fw_version_minor = fw_numbers[2];
-		ASACZ_CC2650_fw_update_header.firmware_body_CRC32_CC2650 = calcCrcLikeChip((const unsigned char *)p_bin_file_body, ASACZ_CC2650_fw_update_header.firmware_body_size);
+		ASACZ_CC2650_fw_update_header.firmware_body_CRC32_CC2650 = calcCrcLikeChip((const unsigned char *)p_bin_file_body_malloced, ASACZ_CC2650_fw_update_header.firmware_body_size);
 
 		time_t rawtime;
 		struct tm * timeinfo;
@@ -940,7 +940,7 @@ int main(int argc, char *argv[])
 	}
 	if (r == enum_ASACZ_CC2650fw_retcode_OK)
 	{
-		size_t n = fwrite(p_bin_file_body, l_filesize, 1, fout);
+		size_t n = fwrite(p_bin_file_body_malloced, l_filesize, 1, fout);
 		if (n != 1)
 		{
 			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_write_body;
@@ -975,6 +975,11 @@ int main(int argc, char *argv[])
 		}
 		printf("\n");
 		printf("<major> <middle> <minor> must be between 0 and 255");
+	}
+
+	if (p_bin_file_body_malloced)
+	{
+		free(p_bin_file_body_malloced);
 	}
 
 
