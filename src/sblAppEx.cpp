@@ -329,7 +329,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
     uint32_t fileCrc, devCrc;		// Variables to save CRC checksum
 	uint32_t devFlashBase;	    	// Flash start address
 	char * pvWrite = (char *)malloc(1);// Vector to application firmware in.
-	FILE * file;		// File stream
+	FILE * file = NULL;		// File stream
 
 
 	fileName = path_binary_file;
@@ -912,7 +912,11 @@ int main(int argc, char *argv[])
 	if (r == enum_ASACZ_CC2650fw_retcode_OK)
 	{
 		int n = snprintf(outfile_name, sizeof(outfile_name), "ASACZ_CC2650fw_%s.%u_%u_%u"
+#if CREATE_CONTIKI_FIRMWARE
+				, "CONTIKI"
+#else
 				, ASACZ_CC2650_fw_update_header.ascii_fw_type
+#endif
 				, ASACZ_CC2650_fw_update_header.fw_version_major
 				, ASACZ_CC2650_fw_update_header.fw_version_middle
 				, ASACZ_CC2650_fw_update_header.fw_version_minor
