@@ -705,6 +705,7 @@ typedef enum
 	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_write_header,
 	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_write_body,
 	enum_ASACZ_CC2650fw_retcode_ERR_unable_to_close_output_file,
+	enum_ASACZ_CC2650fw_retcode_ERR_wrong_footer,
 
 	enum_ASACZ_CC2650fw_retcode_numof
 }enum_ASACZ_CC2650fw_retcode;
@@ -831,6 +832,49 @@ int main(int argc, char *argv[])
 		{
 			r = enum_ASACZ_CC2650fw_retcode_ERR_unable_to_read_input_file_body;
 		}
+	}
+
+	if (r == enum_ASACZ_CC2650fw_retcode_OK)
+	{
+#if CREATE_CONTIKI_FIRMWARE
+		printf("Patching the firmware addresses from 0x1ffa4 to 0x20000 to avoid disabling the bootloader...\n");
+#else
+		printf("Checking the firmware addresses from 0x1ffa4 to 0x20000 to avoid disabling the bootloader...\n");
+#endif
+		static const uint8_t default_footer[]=
+		{
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x82, 0xff, 0xfd, 0xff, 0x54, 0x00, 0x3a, 0xff, 0xbf, 0xf3, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xc5, 0x01, 0xff, 0xc5, 0xff, 0xff, 0xff, 0xff, 0xc5, 0xff, 0xff, 0xff, 0xc5, 0xc5, 0xc5, 0xff, 0xc5, 0xc5, 0xc5, 0xff, 0x00, 0x00,
+			0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
+		};
+		// check if the file overwrites the bootloader enable bits!
+		if (l_filesize >= 0x20000)
+		{
+			uint32_t size_default_footer = sizeof(default_footer)/sizeof(default_footer[0]);
+			uint8_t * p_body_footer= &p_bin_file_body_malloced[0x20000 - size_default_footer];
+			unsigned int i;
+			for (i = 0; i < size_default_footer; i++)
+			{
+				if (*p_body_footer != default_footer[i])
+				{
+#if CREATE_CONTIKI_FIRMWARE
+					*p_body_footer = default_footer[i];
+#else
+					r = enum_ASACZ_CC2650fw_retcode_ERR_wrong_footer;
+					printf("\t error, @offset 0x%05X expected a value of 0x%02X, found instead 0x%02X\n", p_body_footer - p_bin_file_body_malloced, (uint32_t)default_footer[i], (uint32_t)*p_body_footer);
+#endif
+				}
+				p_body_footer++;
+			}
+		}
+#if CREATE_CONTIKI_FIRMWARE
+		printf("Patch applied OK!\n");
+#else
+		if (r == enum_ASACZ_CC2650fw_retcode_OK)
+		{
+			printf("The footer is OK\n");
+		}
+#endif
 	}
 	if (fin)
 	{
