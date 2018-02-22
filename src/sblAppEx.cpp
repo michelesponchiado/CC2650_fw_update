@@ -328,9 +328,10 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 	uint32_t byteCount = 0;			// File size in bytes
     uint32_t fileCrc, devCrc;		// Variables to save CRC checksum
 	uint32_t devFlashBase;	    	// Flash start address
-	char * pvWrite = (char *)malloc(1);// Vector to application firmware in.
-	FILE * file = NULL;		// File stream
+	char * pvWrite = NULL;				// Vector to application firmware in.
+	FILE * file_input = NULL;		// File stream
 
+	pvWrite = (char *)malloc(1);// Vector to application firmware in.
 
 	fileName = path_binary_file;
 
@@ -414,8 +415,8 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		// Read file
 		//
 		my_log(LOG_INFO, "Opening the file %s", fileName);
-		file = fopen(fileName, "rb");
-		if( !file)
+		file_input = fopen(fileName, "rb");
+		if( !file_input)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_open_the_firmware_file;
 			my_log(LOG_ERR, "unable to open the file %s", fileName);
@@ -427,7 +428,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		//
 		// Get file size:
 		//
-		if (fseek(file, 0L, SEEK_END) != 0)
+		if (fseek(file_input, 0L, SEEK_END) != 0)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_seek_to_the_file_end;
 			my_log(LOG_ERR, "unable to seek to the very end of the file");
@@ -436,7 +437,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
-		long int ft = ftell(file);
+		long int ft = ftell(file_input);
 		byteCount = (uint32_t)ft;
 		if (ft < 0)
 		{
@@ -450,7 +451,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 	}
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
-		if (fseek(file, 0L, SEEK_SET) != 0)
+		if (fseek(file_input, 0L, SEEK_SET) != 0)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_seek_where_the_file_begins;
 			my_log(LOG_ERR, "unable to seek to the begin of the file");
@@ -470,7 +471,7 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 	}
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
-		if (fread((char*)&pvWrite[0], byteCount, 1, file) != 1)
+		if (fread((char*)&pvWrite[0], byteCount, 1, file_input) != 1)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_read_the_whole_file;
 			my_log(LOG_ERR, "unable to read the whole file");
@@ -478,12 +479,12 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 	}
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
-		if (fclose(file) != 0)
+		if (fclose(file_input) != 0)
 		{
 			r = enum_do_CC2650_fw_update_retcode_ERR_unable_to_close_the_file;
 			my_log(LOG_ERR, "unable to close the file");
 		}
-		file = NULL;
+		file_input = NULL;
 	}
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
@@ -647,10 +648,10 @@ enum_do_CC2650_fw_update_retcode do_CC2650_fw_operation(enum_CC2650_fw_operation
 		free(pvWrite);
 		pvWrite = NULL;
 	}
-	if (file)
+	if (file_input)
 	{
-		fclose(file);
-		file = NULL;
+		fclose(file_input);
+		file_input = NULL;
 	}
 	if (r == enum_do_CC2650_fw_update_retcode_OK)
 	{
@@ -861,7 +862,7 @@ int main(int argc, char *argv[])
 					*p_body_footer = default_footer[i];
 #else
 					r = enum_ASACZ_CC2650fw_retcode_ERR_wrong_footer;
-					printf("\t error, @offset 0x%05X expected a value of 0x%02X, found instead 0x%02X\n", p_body_footer - p_bin_file_body_malloced, (uint32_t)default_footer[i], (uint32_t)*p_body_footer);
+					printf("\t error, @offset 0x%05X expected a value of 0x%02X, found instead 0x%02X\n", (uint32_t) (p_body_footer - p_bin_file_body_malloced), (uint32_t)default_footer[i], (uint32_t)*p_body_footer);
 #endif
 				}
 				p_body_footer++;
