@@ -485,6 +485,9 @@ SblDeviceCC2650::eraseFlashRange(uint32_t ui32StartAddress,
             return retCode;        
         }
 
+        // give some breath to the system
+        usleep(10000);
+
         //
         // Receive command response (ACK/NAK)
         //
@@ -508,6 +511,8 @@ SblDeviceCC2650::eraseFlashRange(uint32_t ui32StartAddress,
             setState(SBL_ERROR, "Flash erase failed. (Status 0x%02X = '%s'). Flash pages may be locked.\n", devStatus, getCmdStatusString(devStatus));
             return SBL_ERROR;
         }
+        // give some breath to the system
+        usleep(10000);
 
         setState(SBL_SUCCESS, "Flash page erased OK %u / %u\n", i + 1, ui32PageCount);
         setProgress( progress_sbl, 100*(i+1)/ui32PageCount );
@@ -1228,6 +1233,8 @@ SblDeviceCC2650::writeFlashRange(uint32_t ui32StartAddress,
             setState(SBL_ERROR, "Error during download initialization. Device returned status %d (%s).\n", devStatus, getCmdStatusString(devStatus));
             return SBL_ERROR;
         }
+        // give some breath to the system
+        usleep(1000);
 
         //
         // Send data in chunks
@@ -1260,6 +1267,8 @@ SblDeviceCC2650::writeFlashRange(uint32_t ui32StartAddress,
                          (transferNumber));
                 return retCode;
             }
+            // give some breath to the system
+            usleep(1000);
 
             if(pvTransfer[i].bExpectAck)
             {
